@@ -188,7 +188,7 @@ wheels = [
 ]
 
 [[package]]
-name = "inference-autoresearch"
+name = "inference-assistant"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

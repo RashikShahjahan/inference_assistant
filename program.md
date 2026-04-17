@@ -2,7 +2,7 @@
 
 This repository is set up for the `inference_assistant` research assistant workflow for inference benchmarking.
 
-Your job is to help the user evaluate and improve `generate.py` within the fixed benchmark contract. Be collaborative, explicit about tradeoffs, and default to asking before you make changes or run benchmarks.
+Your job is to help the user evaluate and improve `generate.py` within the fixed benchmark contract. Be collaborative and explicit about tradeoffs.
 
 ## Setup
 
@@ -22,21 +22,10 @@ To start or resume a run, work through this checklist:
 
 Each experiment benchmarks `generate.py` against the incumbent snapshot in `state/best_generate.py`.
 
-The repository is intentionally narrow.
 
-**Default behavior:**
-- Inspect the relevant files and explain what you find.
-- Propose concrete next steps when useful.
-- Ask before editing `generate.py`.
-- Ask before running `uv run prepare.py` or `uv run generate.py`.
-- After any run, summarize the result and recommend whether another step is worthwhile.
 
 **What you CAN do:**
-- Analyze `generate.py`, `prepare.py`, `README.md`, and `config.json`.
-- Suggest improvements to `generate.py`.
-- Modify `generate.py` when the user wants you to make a change.
-- Run quick comparisons with `uv run generate.py --description "..."` when the user wants a benchmark.
-- Run full comparisons with `uv run generate.py --full --description "..."` when the user wants a benchmark.
+- Modify `generate.py`, any change is okay as long as it can increase inference throughput, reduce peak memory and keeps the behaviour intact.
 
 **What you CANNOT do during normal experimentation unless the user asks:**
 - Modify `prepare.py` or the benchmark logic it defines.
@@ -49,7 +38,7 @@ Memory is a hard constraint. If a candidate exceeds `max_peak_metal_mb`, it is a
 
 **Simplicity criterion:** all else equal, prefer the simpler change. A small throughput gain is not worth a pile of brittle complexity. If a simpler implementation matches or slightly improves throughput while respecting memory, that is a strong result.
 
-**The first run:** establish the local benchmark state first with `uv run prepare.py`. After that, benchmark the current `generate.py` before making more ambitious changes, but only when the user asks you to run those commands.
+**The first run:** `uv run prepare.py`. 
 
 ## Output format
 
@@ -110,13 +99,12 @@ The benchmark owns this log. Do not hand-edit it during normal experimentation.
 
 ## Suggested workflow
 
-Use this loop only with the user's approval for each action:
 
 1. Inspect the current candidate in `generate.py` and the benchmark contract in `README.md`, `prepare.py`, and `config.json` when needed.
 2. Explain the current bottleneck, risk, or opportunity.
 3. Propose one concrete change and the expected tradeoff.
-4. If the user approves, implement the change in `generate.py`.
-5. If the user approves, run the quick benchmark: `uv run generate.py --description "describe the change"`.
+4. Implement the change in `generate.py`.
+5. Run the quick benchmark: `uv run generate.py --description "describe the change"`.
 6. If the quick run reports a throughput win and stays within memory, recommend a full benchmark and run it only if the user approves.
 7. Summarize the outcome:
    - `trial` means the quick candidate beat the incumbent but has not been promoted.
