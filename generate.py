@@ -12,66 +12,45 @@ from prepare import (
 )
 
 
-def generate_text(model, tokenizer, prompt_tokens, *, max_tokens: int):
+def generate_text(model, tokenizer, prompt_tokens_batch, *, max_tokens: int):
     import mlx.core as mx
-    from mlx_lm.models.cache import make_prompt_cache
 
-    def prompt_cache_for_model():
-        prompt_cache = getattr(model, "_autoresearch_prompt_cache", None)
-        if prompt_cache is None:
-            prompt_cache = make_prompt_cache(model)
-            model._autoresearch_prompt_cache = prompt_cache
-            return prompt_cache
-
-        for cache in prompt_cache:
-            if hasattr(cache, "offset"):
-                cache.offset = 0
-            if hasattr(cache, "_idx"):
-                cache._idx = 0
-        return prompt_cache
-
-    def sample_next(input_tokens):
-        logits = model(input_tokens[None], cache=prompt_cache)
-        return mx.argmax(logits[:, -1, :], axis=-1)
-
-    prompt = mx.array(prompt_tokens)
-    if prompt.size == 0:
-        raise ValueError("Prompt must contain at least one token")
-
-    prompt_cache = prompt_cache_for_model()
-    if prompt.size > 1:
-        model(prompt[:-1][None], cache=prompt_cache)
-        mx.eval([cache.state for cache in prompt_cache])
-        prompt = prompt[-1:]
-
-    current = prompt
     eos_token_ids = set(tokenizer.eos_token_ids)
-    generated_token_ids: list[int] = []
-    next_token = sample_next(current)
-    mx.async_eval(next_token)
+    results: list[dict[str, object]] = []
 
-    for token_count in range(max_tokens):
-        if token_count + 1 < max_tokens:
-            following_token = sample_next(next_token)
-            mx.async_eval(following_token)
+    for prompt_tokens in prompt_tokens_batch:
+        prompt = mx.array(prompt_tokens)
+        if prompt.size == 0:
+            raise ValueError("Prompt must contain at least one token")
 
-        mx.eval(next_token)
+        prompt_cache = model.make_cache() if hasattr(model, "make_cache") else None
+        if prompt.size > 1:
+            prefill_logits = model(prompt[:-1][None], cache=prompt_cache)
+            mx.eval(prefill_logits)
 
-        token = int(next_token.item())
-        if token in eos_token_ids:
-            break
+        current = prompt[-1:][None]
+        generated_token_ids: list[int] = []
 
-        generated_token_ids.append(token)
-        if token_count + 1 < max_tokens:
-            next_token = following_token
+        for _ in range(max_tokens):
+            logits = model(current, cache=prompt_cache)
+            next_token = mx.argmax(logits[:, -1, :], axis=-1)
+            mx.eval(next_token)
 
-        if token_count % 256 == 0:
-            mx.clear_cache()
+            token = int(next_token.item())
+            if token in eos_token_ids:
+                break
 
-    return {
-        "token_ids": generated_token_ids,
-        "text": "",
-    }
+            generated_token_ids.append(token)
+            current = next_token[:, None]
+
+        results.append(
+            {
+                "token_ids": generated_token_ids,
+                "text": "",
+            }
+        )
+
+    return results
 
 
 def build_parser() -> argparse.ArgumentParser:

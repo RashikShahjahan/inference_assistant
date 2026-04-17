@@ -247,18 +247,46 @@ def max_tokens_for_fixture(config: Config, fixture: Fixture) -> int:
     )
 
 
+def generate_fixture_outputs(
+    module, model, tokenizer, config: Config, fixtures: list[Fixture]
+):
+    outputs: dict[str, dict] = {}
+    fixtures_by_max_tokens: dict[int, list[Fixture]] = {}
+
+    for fixture in fixtures:
+        fixture_max_tokens = max_tokens_for_fixture(config, fixture)
+        fixtures_by_max_tokens.setdefault(fixture_max_tokens, []).append(fixture)
+
+    for fixture_max_tokens, grouped_fixtures in fixtures_by_max_tokens.items():
+        prompt_batch = [
+            build_prompt(tokenizer, config, fixture.source_text)
+            for fixture in grouped_fixtures
+        ]
+        batch_results = module.generate_text(
+            model,
+            tokenizer,
+            prompt_batch,
+            max_tokens=fixture_max_tokens,
+        )
+        if len(batch_results) != len(grouped_fixtures):
+            raise RuntimeError(
+                "Candidate returned the wrong number of outputs for the prompt batch"
+            )
+        for fixture, result in zip(grouped_fixtures, batch_results):
+            outputs[fixture.fixture_id] = result
+
+    return outputs
+
+
 def generate_references(config: Config, fixtures: list[Fixture], module_path: Path):
     model, tokenizer = load_model_and_tokenizer(config)
     baseline = load_module_from_path(module_path, f"reference_{time.time_ns()}")
+    generated_outputs = generate_fixture_outputs(
+        baseline, model, tokenizer, config, fixtures
+    )
     outputs: dict[str, dict] = {}
     for fixture in fixtures:
-        prompt_tokens = build_prompt(tokenizer, config, fixture.source_text)
-        result = baseline.generate_text(
-            model,
-            tokenizer,
-            prompt_tokens,
-            max_tokens=max_tokens_for_fixture(config, fixture),
-        )
+        result = generated_outputs[fixture.fixture_id]
         outputs[fixture.fixture_id] = {
             "token_ids": [int(token) for token in result["token_ids"]],
         }
@@ -284,14 +312,11 @@ def _run_once(
     references: dict[str, dict],
 ):
     total_output_tokens = 0
+    generated_outputs = generate_fixture_outputs(
+        module, model, tokenizer, config, fixtures
+    )
     for fixture in fixtures:
-        prompt_tokens = build_prompt(tokenizer, config, fixture.source_text)
-        result = module.generate_text(
-            model,
-            tokenizer,
-            prompt_tokens,
-            max_tokens=max_tokens_for_fixture(config, fixture),
-        )
+        result = generated_outputs[fixture.fixture_id]
         token_ids = [int(token) for token in result["token_ids"]]
         expected = references[fixture.fixture_id]["token_ids"]
         if token_ids != expected:

@@ -22,15 +22,20 @@ Once you get confirmation, kick off the experimentation.
 
 Each experiment runs through the fixed benchmark contract. Iterate with quick runs, and only use full runs to advance the incumbent.
 
+`prepare.py` still uses `mlx-lm` for model loading. Research changes should treat that as part of the fixed benchmark harness, not something to optimize inside `generate.py`.
+
+**`generate.py` contract**:
+- Implement `generate_text(model, tokenizer, prompt_tokens_batch, *, max_tokens: int)`.
+- `prompt_tokens_batch` is a list of tokenized prompts, and the function must return one result per prompt in the same order.
+- Each result must be a dict with at least `token_ids` and `text` keys.
+- The default implementation is intentionally a simple greedy decoder; benchmark ideas should preserve the batched API and exact output-token contract.
+
 **What you CAN do:**
 - Modify `generate.py` — this is the only file you edit during research.
-- Change generate-path implementation details such as prefill chunk sizing, one-shot vs chunked prefill, `mx.eval()` cadence, `mx.clear_cache()` policy, token collection strategy, detokenization timing, local reference caching in the decode loop, and stop-token checks.
-
 **What you CANNOT do:**
 - Modify `prepare.py`.
 - Change the WMT24++ dataset selection or generated fixture ids in `config.json`.
 - Change the correctness contract: candidate output token ids must exactly match the frozen reference outputs.
-- Use batching, worker scheduling changes, model swaps, prompt-template changes, or speculative decoding.
 
 **The goal is simple: maximize `output_tokens_per_sec` while staying at or below `max_peak_metal_mb`.** Correctness is strict, and the peak Metal memory ceiling is a hard constraint. Throughput always takes priority once the candidate is within the memory limit: do not keep or promote a change that lowers throughput only because it uses less memory.
 
