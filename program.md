@@ -31,11 +31,12 @@ Each experiment runs through the fixed benchmark contract. Iterate with quick ru
 - The default implementation is intentionally a simple greedy decoder; benchmark ideas should preserve the batched API and exact output-token contract.
 
 **What you CAN do:**
-- Modify `generate.py` — this is the only file you edit during research.
+- Modify `generate.py` — this is the only file you edit during research. You can update the generate_text function and create new functions if needed.
 **What you CANNOT do:**
 - Modify `prepare.py`.
 - Change the WMT24++ dataset selection or generated fixture ids in `config.json`.
 - Change the correctness contract: candidate output token ids must exactly match the frozen reference outputs.
+- Use external libraries except for mlx
 
 **The goal is simple: maximize `output_tokens_per_sec` while staying at or below `max_peak_metal_mb`.** Correctness is strict, and the peak Metal memory ceiling is a hard constraint. Throughput always takes priority once the candidate is within the memory limit: do not keep or promote a change that lowers throughput only because it uses less memory.
 
