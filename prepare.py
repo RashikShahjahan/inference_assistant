@@ -28,6 +28,7 @@ class Config:
     dataset_repo: str
     dataset_file: str
     dataset_source_field: str
+    dataset_reference_field: str
     dataset_fixture_limit: int | None
     dataset_skip_bad_source: bool
     max_new_tokens: int
@@ -42,6 +43,7 @@ class Config:
 class Fixture:
     fixture_id: str
     source_text: str
+    reference_text: str
     max_tokens: int | None = None
 
 
@@ -50,13 +52,25 @@ def load_config() -> Config:
     max_peak_metal_mb = payload.get("max_peak_metal_mb")
     if max_peak_metal_mb is not None:
         max_peak_metal_mb = float(max_peak_metal_mb)
+    dataset_source_field = str(payload["dataset_source_field"])
+    dataset_reference_field = payload.get("dataset_reference_field")
+    if dataset_reference_field is None:
+        if dataset_source_field == "source":
+            dataset_reference_field = "target"
+        elif dataset_source_field == "target":
+            dataset_reference_field = "source"
+        else:
+            raise ValueError(
+                "config.json must set dataset_reference_field when dataset_source_field is not 'source' or 'target'"
+            )
     return Config(
         model=str(payload["model"]),
         source_lang=str(payload["source_lang"]),
         target_lang=str(payload["target_lang"]),
         dataset_repo=str(payload["dataset_repo"]),
         dataset_file=str(payload["dataset_file"]),
-        dataset_source_field=str(payload["dataset_source_field"]),
+        dataset_source_field=dataset_source_field,
+        dataset_reference_field=str(dataset_reference_field),
         dataset_fixture_limit=(
             int(payload["dataset_fixture_limit"])
             if payload.get("dataset_fixture_limit") is not None
@@ -109,7 +123,8 @@ def load_fixtures() -> list[Fixture]:
         if config.dataset_skip_bad_source and payload.get("is_bad_source"):
             continue
         source_text = str(payload.get(config.dataset_source_field, "")).strip()
-        if not source_text:
+        reference_text = str(payload.get(config.dataset_reference_field, "")).strip()
+        if not source_text or not reference_text:
             continue
         fixture_id = dataset_fixture_id(payload, line_number)
         if fixture_id in seen_ids:
@@ -117,7 +132,13 @@ def load_fixtures() -> list[Fixture]:
                 f"Duplicate fixture id at line {line_number}: {fixture_id}"
             )
         seen_ids.add(fixture_id)
-        fixtures.append(Fixture(fixture_id=fixture_id, source_text=source_text))
+        fixtures.append(
+            Fixture(
+                fixture_id=fixture_id,
+                source_text=source_text,
+                reference_text=reference_text,
+            )
+        )
         if (
             config.dataset_fixture_limit is not None
             and len(fixtures) >= config.dataset_fixture_limit
@@ -178,15 +199,19 @@ def benchmark_generate_fn(
     generate_fn, model, tokenizer, mode: str, config: Config, fixtures
 ):
     import mlx.core as mx
+    from sacrebleu.metrics import CHRF
 
     repeats = config.quick_repeats if mode == "quick" else config.full_repeats
     prompts_by_max_tokens: dict[int, list[list[int]]] = {}
+    fixtures_by_max_tokens: dict[int, list[Fixture]] = {}
+    chrf = CHRF()
     fixture_count = 0
     for fixture in fixtures:
         fixture_max_tokens = max_tokens_for_fixture(config, fixture)
         prompts_by_max_tokens.setdefault(fixture_max_tokens, []).append(
             build_prompt(tokenizer, config, fixture.source_text)
         )
+        fixtures_by_max_tokens.setdefault(fixture_max_tokens, []).append(fixture)
         fixture_count += 1
 
     for _ in range(config.warmup_runs):
@@ -204,7 +229,9 @@ def benchmark_generate_fn(
 
     started = time.perf_counter()
     total_output_tokens = 0
-    for _ in range(repeats):
+    hypotheses: list[str] = []
+    references: list[str] = []
+    for repeat_index in range(repeats):
         for fixture_max_tokens, prompt_batch in prompts_by_max_tokens.items():
             batch_results = generate_fn(
                 model,
@@ -216,6 +243,12 @@ def benchmark_generate_fn(
                 raise RuntimeError(
                     "Candidate returned the wrong number of outputs for the prompt batch"
                 )
+            if repeat_index == 0:
+                for fixture, result in zip(
+                    fixtures_by_max_tokens[fixture_max_tokens], batch_results
+                ):
+                    hypotheses.append(str(result["text"]).strip())
+                    references.append(fixture.reference_text)
             for result in batch_results:
                 total_output_tokens += len(result["token_ids"])
 
@@ -231,6 +264,11 @@ def benchmark_generate_fn(
     peak_metal_mb = round(peak_memory_bytes / 1024 / 1024, 1)
     output_tokens_per_sec = 0.0 if elapsed <= 0 else total_output_tokens / elapsed
     within_memory_limit = peak_metal_mb <= float(config.max_peak_metal_mb)
+    chrf_score = (
+        0.0
+        if not references
+        else float(chrf.corpus_score(hypotheses, [references]).score)
+    )
 
     return {
         "ok": within_memory_limit,
@@ -240,6 +278,9 @@ def benchmark_generate_fn(
         "elapsed_seconds": round(elapsed, 4),
         "output_tokens": total_output_tokens,
         "output_tokens_per_sec": round(output_tokens_per_sec, 4),
+        "quality_metric": "chrf",
+        "quality_fixture_count": len(references),
+        "chrf_score": round(chrf_score, 4),
         "peak_metal_mb": peak_metal_mb,
         "max_peak_metal_mb": float(config.max_peak_metal_mb),
         "failure_reason": None if within_memory_limit else "memory_limit_exceeded",
@@ -312,6 +353,11 @@ def compare_candidate(
     elif candidate_file_hash == incumbent_file_hash:
         status = "incumbent"
         decision_reason = "same_as_incumbent"
+    elif float(candidate_metrics["chrf_score"]) < float(
+        incumbent_metrics["chrf_score"]
+    ):
+        status = "discard"
+        decision_reason = "quality_regression"
     elif float(candidate_metrics["output_tokens_per_sec"]) > float(
         incumbent_metrics["output_tokens_per_sec"]
     ):

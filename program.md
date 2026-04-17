@@ -57,6 +57,9 @@ After a benchmark run, the CLI prints a JSON summary like this:
     "elapsed_seconds": 1.2345,
     "output_tokens": 987,
     "output_tokens_per_sec": 799.5132,
+    "quality_metric": "chrf",
+    "quality_fixture_count": 2,
+    "chrf_score": 54.321,
     "peak_metal_mb": 12345.6,
     "max_peak_metal_mb": 13000.0,
     "failure_reason": null
@@ -69,6 +72,9 @@ After a benchmark run, the CLI prints a JSON summary like this:
     "elapsed_seconds": 1.252,
     "output_tokens": 987,
     "output_tokens_per_sec": 788.3387,
+    "quality_metric": "chrf",
+    "quality_fixture_count": 2,
+    "chrf_score": 53.998,
     "peak_metal_mb": 12380.4,
     "max_peak_metal_mb": 13000.0,
     "failure_reason": null
@@ -81,9 +87,12 @@ After a benchmark run, the CLI prints a JSON summary like this:
 The key fields are:
 
 - `candidate.output_tokens_per_sec`: the metric to maximize.
+- `candidate.chrf_score`: translation quality against the reference field on the same fixtures, computed with `sacrebleu` corpus `chrF`.
 - `candidate.peak_metal_mb`: must stay within the configured ceiling.
 - `status`: one of `incumbent`, `trial`, `promoted`, or `discard`.
 - `decision_reason`: explains why the candidate was kept or rejected.
+
+Candidates are discarded when `chrf_score` is lower than the incumbent, even if throughput is higher.
 
 If memory exceeds the ceiling, the candidate returns `failure_reason: "memory_limit_exceeded"` and the run is discarded.
 
