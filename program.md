@@ -23,8 +23,7 @@ Once you get confirmation, kick off the experimentation.
 Each experiment runs through the fixed benchmark contract. Iterate with quick runs, and only use full runs to advance the incumbent.
 
 **What you CAN do:**
-- Modify `generate.py` — this is the only file you edit during research.
-- Use libraries that are already part of this repo's dependency set, including `mlx`, `mlx_lm`, and the Python standard library.
+- Modify `generate.py` — this is the only file you edit during research. Everything is fair game: caching mechanism, batch generation, decoding technique, changing prefill_step_size, sampler ,logit processor, state machine .
 
 **What you CANNOT do:**
 - Modify `prepare.py`.
