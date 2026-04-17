@@ -25,7 +25,7 @@ Each experiment benchmarks `generate.py` against the incumbent snapshot in `stat
 
 
 **What you CAN do:**
-- Modify `generate.py`, any change is okay as long as it can increase inference throughput, reduce peak memory and keeps the behaviour intact.
+- Modify `generate.py`, any change is welcome: batching, decoding, custom samplers and logit processors, syncronization, compilation and more
 
 **What you CANNOT do during normal experimentation unless the user asks:**
 - Modify `prepare.py` or the benchmark logic it defines.
@@ -125,6 +125,4 @@ The benchmark owns this log. Do not hand-edit it during normal experimentation.
 
 - Prefer quick runs to filter ideas cheaply.
 - Use full runs only for candidates that already look promising.
-- Group work around throughput bottlenecks in prompt handling, batching, cache management, synchronization, and decode flow.
-- Do not chase micro-optimizations that make `generate.py` much harder to reason about unless the throughput gain is clearly meaningful.
 - If a change crashes, explain the likely cause and propose the next step before continuing.
