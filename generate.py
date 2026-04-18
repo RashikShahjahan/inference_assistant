@@ -6,6 +6,7 @@ import json
 import time
 from collections import deque
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import mlx.core as mx
@@ -27,6 +28,11 @@ DEFAULT_MAX_TOKENS = 100
 
 # A stream on the default device just for generation
 generation_stream = mx.new_stream(mx.default_device())
+
+
+@partial(mx.compile, shapeless=True)
+def _default_argmax_sampler(x: mx.array) -> mx.array:
+    return mx.argmax(x, axis=-1)
 
 
 def _right_pad_prompts(prompts, max_length=None):
@@ -585,13 +591,13 @@ class BatchGenerator:
             List[Callable[[mx.array, mx.array], mx.array]]
         ] = None,
         completion_batch_size: int = 32,
-        prefill_batch_size: int = 8,
+        prefill_batch_size: int = 16,
         prefill_step_size: int = 2048,
         max_kv_size: Optional[int] = None,
     ):
         self.model = model
         self.max_tokens = max_tokens
-        self.sampler = sampler or (lambda x: mx.argmax(x, axis=-1))
+        self.sampler = sampler or _default_argmax_sampler
         self.logits_processors = logits_processors or []
         self.prefill_step_size = prefill_step_size
         self.prefill_batch_size = prefill_batch_size
