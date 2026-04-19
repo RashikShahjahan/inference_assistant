@@ -965,7 +965,6 @@ def generate_text(model, tokenizer, prompt_tokens_batch, *, max_tokens: int):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Benchmark the current generate.py")
-    parser.add_argument("--full", action="store_true", help="Use the full fixture set")
     parser.add_argument(
         "--description",
         default="manual run",
@@ -980,7 +979,6 @@ def main() -> int:
         load_config,
         load_fixtures,
         require_memory_limit,
-        split_fixtures,
     )
 
     parser = build_parser()
@@ -988,20 +986,16 @@ def main() -> int:
 
     config = load_config()
     fixtures = load_fixtures()
-    quick_fixtures, full_fixtures = split_fixtures(config, fixtures)
     require_memory_limit(config)
 
-    mode = "full" if args.full else "quick"
-    selected_fixtures = full_fixtures if args.full else quick_fixtures
     result = compare_candidate(
         config,
-        mode,
-        selected_fixtures,
+        fixtures,
         args.description,
         generate_text,
     )
     print(json.dumps(result, indent=2))
-    return 0 if result["status"] in {"trial", "promoted", "incumbent"} else 1
+    return 0 if result["status"] in {"promoted", "incumbent"} else 1
 
 
 if __name__ == "__main__":

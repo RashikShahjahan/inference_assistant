@@ -33,10 +33,8 @@ class Config:
     dataset_skip_bad_source: bool
     max_new_tokens: int
     warmup_runs: int
-    quick_repeats: int
-    full_repeats: int
+    repeats: int
     max_peak_metal_mb: float | None
-    quick_fixture_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -79,14 +77,12 @@ def load_config() -> Config:
         dataset_skip_bad_source=bool(payload["dataset_skip_bad_source"]),
         max_new_tokens=int(payload["max_new_tokens"]),
         warmup_runs=int(payload["warmup_runs"]),
-        quick_repeats=int(payload["quick_repeats"]),
-        full_repeats=int(payload["full_repeats"]),
+        repeats=int(payload["repeats"]),
         max_peak_metal_mb=max_peak_metal_mb,
-        quick_fixture_ids=tuple(str(item) for item in payload["quick_fixture_ids"]),
     )
 
 
-def require_memory_limit(config: Config):
+def require_memory_limit(config: Config) -> None:
     if config.max_peak_metal_mb is None or config.max_peak_metal_mb <= 0:
         raise ValueError("config.json must set max_peak_metal_mb to a positive value")
 
@@ -151,19 +147,6 @@ def load_fixtures() -> list[Fixture]:
     return fixtures
 
 
-def split_fixtures(
-    config: Config, fixtures: list[Fixture]
-) -> tuple[list[Fixture], list[Fixture]]:
-    fixture_by_id = {fixture.fixture_id: fixture for fixture in fixtures}
-    quick: list[Fixture] = []
-    for fixture_id in config.quick_fixture_ids:
-        fixture = fixture_by_id.get(fixture_id)
-        if fixture is None:
-            raise ValueError(f"Quick fixture id not found: {fixture_id}")
-        quick.append(fixture)
-    return quick, fixtures
-
-
 def load_model_and_tokenizer(config: Config):
     from mlx_lm import load
 
@@ -195,13 +178,11 @@ def max_tokens_for_fixture(config: Config, fixture: Fixture) -> int:
     )
 
 
-def benchmark_generate_fn(
-    generate_fn, model, tokenizer, mode: str, config: Config, fixtures
-):
+def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixtures):
     import mlx.core as mx
     from sacrebleu.metrics import CHRF
 
-    repeats = config.quick_repeats if mode == "quick" else config.full_repeats
+    repeats = config.repeats
     prompts_by_max_tokens: dict[int, list[list[int]]] = {}
     fixtures_by_max_tokens: dict[int, list[Fixture]] = {}
     chrf = CHRF()
@@ -272,7 +253,7 @@ def benchmark_generate_fn(
 
     return {
         "ok": within_memory_limit,
-        "mode": mode,
+        "mode": "full",
         "fixture_count": fixture_count,
         "repeats": repeats,
         "elapsed_seconds": round(elapsed, 4),
@@ -322,9 +303,7 @@ def promote_candidate():
     shutil.copy2(GENERATE_PATH, INCUMBENT_PATH)
 
 
-def compare_candidate(
-    config: Config, mode: str, fixtures, description: str, generate_fn
-):
+def compare_candidate(config: Config, fixtures, description: str, generate_fn):
     if not INCUMBENT_PATH.exists():
         raise ValueError("Incumbent snapshot missing. Run `uv run prepare.py` first.")
 
@@ -332,7 +311,7 @@ def compare_candidate(
     incumbent_file_hash = candidate_hash(INCUMBENT_PATH)
     model, tokenizer = load_model_and_tokenizer(config)
     candidate_metrics = benchmark_generate_fn(
-        generate_fn, model, tokenizer, mode, config, fixtures
+        generate_fn, model, tokenizer, config, fixtures
     )
 
     if candidate_file_hash == incumbent_file_hash:
@@ -342,7 +321,7 @@ def compare_candidate(
             INCUMBENT_PATH, f"incumbent_{time.time_ns()}"
         )
         incumbent_metrics = benchmark_generate_fn(
-            incumbent_module.generate_text, model, tokenizer, mode, config, fixtures
+            incumbent_module.generate_text, model, tokenizer, config, fixtures
         )
 
     if not candidate_metrics["ok"]:
@@ -361,13 +340,9 @@ def compare_candidate(
     elif float(candidate_metrics["output_tokens_per_sec"]) > float(
         incumbent_metrics["output_tokens_per_sec"]
     ):
-        if mode == "full":
-            promote_candidate()
-            status = "promoted"
-            decision_reason = "throughput_win"
-        else:
-            status = "trial"
-            decision_reason = "quick_throughput_win"
+        promote_candidate()
+        status = "promoted"
+        decision_reason = "throughput_win"
     else:
         status = "discard"
         decision_reason = "no_throughput_win"
@@ -376,7 +351,7 @@ def compare_candidate(
     append_results_row(
         [
             run_identifier,
-            mode,
+            "full",
             candidate_file_hash,
             incumbent_file_hash,
             f"{float(candidate_metrics.get('output_tokens_per_sec', 0.0)):.4f}",
@@ -389,7 +364,7 @@ def compare_candidate(
 
     return {
         "run_id": run_identifier,
-        "mode": mode,
+        "mode": "full",
         "description": description,
         "candidate": candidate_metrics,
         "incumbent": incumbent_metrics,

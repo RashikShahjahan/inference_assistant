@@ -27,7 +27,7 @@ Each experiment benchmarks `generate.py` against the incumbent snapshot in `stat
 
 **What you CANNOT do during normal experimentation unless the user asks:**
 - Modify `prepare.py` or the benchmark logic it defines.
-- Change the dataset selection, quick fixture ids, or memory ceiling in `config.json`.
+- Change the dataset selection or memory ceiling in `config.json`.
 - Add new dependencies or rely on packages that are not already present in `pyproject.toml`.
 
 **The goal is simple: maximize `output_tokens_per_sec` while staying at or below `max_peak_metal_mb`.**
@@ -45,13 +45,13 @@ After a benchmark run, the CLI prints a JSON summary like this:
 ```json
 {
   "run_id": "20260417-120000",
-  "mode": "quick",
+  "mode": "full",
   "description": "prefill tweak",
   "candidate": {
     "ok": true,
-    "mode": "quick",
-    "fixture_count": 2,
-    "repeats": 2,
+    "mode": "full",
+    "fixture_count": 32,
+    "repeats": 3,
     "elapsed_seconds": 1.2345,
     "output_tokens": 987,
     "output_tokens_per_sec": 799.5132,
@@ -64,9 +64,9 @@ After a benchmark run, the CLI prints a JSON summary like this:
   },
   "incumbent": {
     "ok": true,
-    "mode": "quick",
-    "fixture_count": 2,
-    "repeats": 2,
+    "mode": "full",
+    "fixture_count": 32,
+    "repeats": 3,
     "elapsed_seconds": 1.252,
     "output_tokens": 987,
     "output_tokens_per_sec": 788.3387,
@@ -77,8 +77,8 @@ After a benchmark run, the CLI prints a JSON summary like this:
     "max_peak_metal_mb": 13000.0,
     "failure_reason": null
   },
-  "status": "trial",
-  "decision_reason": "quick_throughput_win"
+  "status": "promoted",
+  "decision_reason": "throughput_win"
 }
 ```
 
@@ -87,7 +87,7 @@ The key fields are:
 - `candidate.output_tokens_per_sec`: the metric to maximize.
 - `candidate.chrf_score`: translation quality against the reference field on the same fixtures, computed with `sacrebleu` corpus `chrF`.
 - `candidate.peak_metal_mb`: must stay within the configured ceiling.
-- `status`: one of `incumbent`, `trial`, `promoted`, or `discard`.
+- `status`: one of `incumbent`, `promoted`, or `discard`.
 - `decision_reason`: explains why the candidate was kept or rejected.
 
 Candidates are discarded when `chrf_score` is lower than the incumbent, even if throughput is higher.
@@ -110,12 +110,9 @@ The benchmark owns this log. Do not hand-edit it during normal experimentation.
 2. Explain the current bottleneck, risk, or opportunity.
 3. Propose one concrete change and the expected tradeoff.
 4. Implement the change in `generate.py`.
-5. Run the quick benchmark: `uv run generate.py --description "describe the change"`.
-6. If the quick run reports a throughput win and stays within memory, run a full benchmark: `uv run generate.py --full --description "describe the change"`.
-7. Summarize the outcome:
-   - `trial` means the quick candidate beat the incumbent but has not been promoted.
+5. Run the benchmark: `uv run generate.py --description "describe the change"`.
+6. Summarize the outcome:
    - `promoted` means the full candidate beat the incumbent and `state/best_generate.py` was updated automatically.
    - `discard` means the candidate lost on throughput or violated the memory ceiling.
    - `incumbent` means the file is effectively identical to the current best snapshot.
-8. Ask whether the user wants to continue with another idea.
-
+7. Ask whether the user wants to continue with another idea.

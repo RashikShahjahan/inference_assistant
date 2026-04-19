@@ -26,11 +26,8 @@ uv sync
 # 3. Set the memory ceiling in config.json, then seed the benchmark state
 uv run prepare.py
 
-# 4. Run a quick benchmark
-uv run generate.py --description "trial change"
-
-# 5. Run the full benchmark
-uv run generate.py --full --description "candidate change"
+# 4. Run the benchmark
+uv run generate.py --description "candidate change"
 ```
 
 ## Project structure
@@ -49,10 +46,9 @@ results.tsv     - append-only run log
 
 1. Run `uv run prepare.py` once after changing the benchmark contract.
 2. Edit `generate.py`.
-3. Run `uv run generate.py --description "..."` for the quick fixture set.
-4. If the quick run looks good, run `uv run generate.py --full --description "..."`.
-5. Full runs automatically promote the candidate to `state/best_generate.py` when throughput improves and memory stays within the ceiling.
-6. Inspect `results.tsv` for experiment history.
+3. Run `uv run generate.py --description "..."`.
+4. Benchmark runs automatically promote the candidate to `state/best_generate.py` when throughput improves and memory stays within the ceiling.
+5. Inspect `results.tsv` for experiment history.
 
 ## Config
 
@@ -69,10 +65,8 @@ results.tsv     - append-only run log
 - `dataset_skip_bad_source`
 - `max_new_tokens`
 - `warmup_runs`
-- `quick_repeats`
-- `full_repeats`
+- `repeats`
 - `max_peak_metal_mb`
-- `quick_fixture_ids`
 
 `max_peak_metal_mb` must be set to a positive value before `uv run prepare.py` or benchmark runs will execute.
 
