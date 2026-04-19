@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "apple_profiler": {
+      "type": "local",
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        "./vendor/apple-profiler",
+        "apple-profiler"
+      ],
+      "environment": {
+        "DEVELOPER_DIR": "/Applications/Xcode.app/Contents/Developer"
+      },
+      "enabled": true,
+      "timeout": 30000
+    }
+  },
+  "permission": {
+    "apple_profiler_*": "allow"
+  }
+}

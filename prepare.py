@@ -200,6 +200,11 @@ def profile_batch_generate_metal(
     if trace_path.suffix != ".gputrace":
         raise ValueError("trace_path must end with .gputrace")
     trace_path.parent.mkdir(parents=True, exist_ok=True)
+    if trace_path.exists():
+        if trace_path.is_dir():
+            shutil.rmtree(trace_path)
+        else:
+            trace_path.unlink()
 
     synchronize = getattr(mx, "synchronize", None)
     reset_peak_memory = getattr(mx, "reset_peak_memory", None)
@@ -237,6 +242,12 @@ def profile_batch_generate_metal(
         )
         if callable(synchronize):
             synchronize()
+    except RuntimeError as exc:
+        if "Capture layer is not inserted" in str(exc):
+            raise RuntimeError(
+                "Metal capture requires launching the process with MTL_CAPTURE_ENABLED=1"
+            ) from exc
+        raise
     finally:
         if capture_started:
             mx.metal.stop_capture()
