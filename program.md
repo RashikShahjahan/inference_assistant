@@ -11,7 +11,7 @@ To start or resume a run, work through this checklist:
    - `README.md` - repository context and workflow.
    - `prepare.py` - fixed benchmark contract, fixture loading, memory checks, incumbent promotion, and results logging. Do not modify during normal experimentation.
    - `generate.py` - the only file you tune.
-   - `config.json` - fixed benchmark configuration for the current run.
+   - `config.json` - fixed dataset, model, and memory configuration for the current run.
 3. Run `uv run prepare.py` once after changing the benchmark contract or when initializing a fresh workspace.
 4. Verify that `state/best_generate.py` and `results.tsv` exist.
 5. Confirm the benchmark is ready, then summarize the current state for the user.
@@ -51,7 +51,6 @@ After a benchmark run, the CLI prints a JSON summary like this:
     "ok": true,
     "mode": "full",
     "fixture_count": 32,
-    "repeats": 3,
     "elapsed_seconds": 1.2345,
     "output_tokens": 987,
     "output_tokens_per_sec": 799.5132,
@@ -66,7 +65,6 @@ After a benchmark run, the CLI prints a JSON summary like this:
     "ok": true,
     "mode": "full",
     "fixture_count": 32,
-    "repeats": 3,
     "elapsed_seconds": 1.252,
     "output_tokens": 987,
     "output_tokens_per_sec": 788.3387,

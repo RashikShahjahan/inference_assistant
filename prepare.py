@@ -33,8 +33,6 @@ class Config:
     dataset_fixture_limit: int | None
     dataset_skip_bad_source: bool
     max_new_tokens: int
-    warmup_runs: int
-    repeats: int
     max_peak_metal_mb: float | None
 
 
@@ -77,8 +75,6 @@ def load_config() -> Config:
         ),
         dataset_skip_bad_source=bool(payload["dataset_skip_bad_source"]),
         max_new_tokens=int(payload["max_new_tokens"]),
-        warmup_runs=int(payload["warmup_runs"]),
-        repeats=int(payload["repeats"]),
         max_peak_metal_mb=max_peak_metal_mb,
     )
 
@@ -273,7 +269,6 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     import mlx.core as mx
     from sacrebleu.metrics import CHRF
 
-    repeats = config.repeats
     prompts_by_max_tokens: dict[int, list[list[int]]] = {}
     fixtures_by_max_tokens: dict[int, list[Fixture]] = {}
     warmup_prompt_batch: list[list[int]] | None = None
@@ -290,14 +285,13 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
         fixtures_by_max_tokens.setdefault(fixture_max_tokens, []).append(fixture)
         fixture_count += 1
 
-    for _ in range(config.warmup_runs):
-        if warmup_prompt_batch is not None and warmup_max_tokens is not None:
-            generate_fn(
-                model,
-                tokenizer,
-                warmup_prompt_batch,
-                max_tokens=warmup_max_tokens,
-            )
+    if warmup_prompt_batch is not None and warmup_max_tokens is not None:
+        generate_fn(
+            model,
+            tokenizer,
+            warmup_prompt_batch,
+            max_tokens=warmup_max_tokens,
+        )
 
     reset = getattr(mx, "reset_peak_memory", None)
     if callable(reset):
@@ -312,26 +306,24 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     total_output_tokens = 0
     hypotheses: list[str] = []
     references: list[str] = []
-    for repeat_index in range(repeats):
-        for fixture_max_tokens, prompt_batch in prompts_by_max_tokens.items():
-            batch_results = generate_fn(
-                model,
-                tokenizer,
-                prompt_batch,
-                max_tokens=fixture_max_tokens,
+    for fixture_max_tokens, prompt_batch in prompts_by_max_tokens.items():
+        batch_results = generate_fn(
+            model,
+            tokenizer,
+            prompt_batch,
+            max_tokens=fixture_max_tokens,
+        )
+        if len(batch_results) != len(prompt_batch):
+            raise RuntimeError(
+                "Candidate returned the wrong number of outputs for the prompt batch"
             )
-            if len(batch_results) != len(prompt_batch):
-                raise RuntimeError(
-                    "Candidate returned the wrong number of outputs for the prompt batch"
-                )
-            if repeat_index == 0:
-                for fixture, result in zip(
-                    fixtures_by_max_tokens[fixture_max_tokens], batch_results
-                ):
-                    hypotheses.append(str(result["text"]).strip())
-                    references.append(fixture.reference_text)
-            for result in batch_results:
-                total_output_tokens += len(result["token_ids"])
+        for fixture, result in zip(
+            fixtures_by_max_tokens[fixture_max_tokens], batch_results
+        ):
+            hypotheses.append(str(result["text"]).strip())
+            references.append(fixture.reference_text)
+        for result in batch_results:
+            total_output_tokens += len(result["token_ids"])
 
     if callable(synchronize):
         synchronize()
@@ -355,7 +347,6 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
         "ok": within_memory_limit,
         "mode": "full",
         "fixture_count": fixture_count,
-        "repeats": repeats,
         "elapsed_seconds": round(elapsed, 4),
         "output_tokens": total_output_tokens,
         "output_tokens_per_sec": round(output_tokens_per_sec, 4),

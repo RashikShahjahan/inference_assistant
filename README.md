@@ -8,7 +8,7 @@ The repo intentionally keeps the workflow small:
 
 - `prepare.py` owns the fixed benchmark contract, setup, incumbent snapshot, and result logging.
 - `generate.py` is the only file you tune. It delegates comparison to the fixed benchmark.
-- `config.json` defines the model, dataset slice, memory ceiling, and repeat counts.
+- `config.json` defines the model, dataset slice, and memory ceiling.
 
 Performance is measured as `output_tokens_per_sec`. The benchmark also reports `chrf_score` against the same dataset fixtures using `sacrebleu`, and candidates are discarded if quality regresses versus the incumbent. `max_peak_metal_mb` is a hard limit.
 
@@ -64,13 +64,13 @@ results.tsv     - append-only run log
 - `dataset_fixture_limit`
 - `dataset_skip_bad_source`
 - `max_new_tokens`
-- `warmup_runs`
-- `repeats`
 - `max_peak_metal_mb`
 
 `max_peak_metal_mb` must be set to a positive value before `uv run prepare.py` or benchmark runs will execute.
 
 `dataset_reference_field` is the reference translation field used for quality scoring on the same fixtures.
+
+Every benchmark uses one warmup run followed by one measured pass.
 
 ## License
 
