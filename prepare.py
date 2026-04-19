@@ -9,6 +9,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent
@@ -176,6 +177,85 @@ def max_tokens_for_fixture(config: Config, fixture: Fixture) -> int:
     return (
         fixture.max_tokens if fixture.max_tokens is not None else config.max_new_tokens
     )
+
+
+def profile_batch_generate_metal(
+    batch_generate_fn,
+    model,
+    tokenizer,
+    prompts,
+    *,
+    max_tokens: int | list[int] = 128,
+    trace_path: str | Path = "state/batch_generate_profile.gputrace",
+    warmup: bool = True,
+    **kwargs,
+) -> dict[str, Any]:
+    """Capture a single representative ``batch_generate`` call as a Metal trace."""
+    import mlx.core as mx
+
+    if not mx.metal.is_available():
+        raise RuntimeError("Metal profiling requires an Apple Silicon / Metal device")
+
+    trace_path = Path(trace_path)
+    if trace_path.suffix != ".gputrace":
+        raise ValueError("trace_path must end with .gputrace")
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+
+    synchronize = getattr(mx, "synchronize", None)
+    reset_peak_memory = getattr(mx, "reset_peak_memory", None)
+    get_peak_memory = getattr(mx, "get_peak_memory", None)
+
+    if warmup:
+        batch_generate_fn(
+            model,
+            tokenizer,
+            prompts,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
+        if callable(synchronize):
+            synchronize()
+
+    if callable(reset_peak_memory):
+        reset_peak_memory()
+    else:
+        mx.metal.reset_peak_memory()
+    if callable(synchronize):
+        synchronize()
+
+    started = time.perf_counter()
+    capture_started = False
+    try:
+        mx.metal.start_capture(str(trace_path))
+        capture_started = True
+        response = batch_generate_fn(
+            model,
+            tokenizer,
+            prompts,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
+        if callable(synchronize):
+            synchronize()
+    finally:
+        if capture_started:
+            mx.metal.stop_capture()
+
+    elapsed = time.perf_counter() - started
+    peak_memory_bytes = (
+        int(get_peak_memory())
+        if callable(get_peak_memory)
+        else int(mx.metal.get_peak_memory())
+    )
+
+    return {
+        "trace_path": str(trace_path),
+        "prompt_count": len(prompts),
+        "output_tokens": sum(len(token_ids) for token_ids in response.token_ids),
+        "elapsed_seconds": round(elapsed, 4),
+        "peak_metal_mb": round(peak_memory_bytes / 1024 / 1024, 1),
+        "warmup": warmup,
+    }
 
 
 def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixtures):
