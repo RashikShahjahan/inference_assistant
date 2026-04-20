@@ -28,7 +28,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--metal-profile-fixture-index",
         type=int,
         default=0,
-        help="Fixture index to use for representative Metal profiling",
+        help="First fixture index to use for representative Metal profiling",
+    )
+    parser.add_argument(
+        "--metal-profile-fixture-count",
+        type=int,
+        default=8,
+        help="Number of fixtures to profile as one representative batch",
     )
     return parser
 
@@ -46,16 +52,32 @@ def main() -> int:
         raise ValueError(
             f"metal profile fixture index {fixture_index} is out of range for {len(fixtures)} fixtures"
         )
+    fixture_count = args.metal_profile_fixture_count
+    if fixture_count <= 0:
+        raise ValueError("metal profile fixture count must be positive")
+
+    selected_fixtures = fixtures[fixture_index : fixture_index + fixture_count]
+    if len(selected_fixtures) != fixture_count:
+        raise ValueError(
+            f"metal profile fixture range [{fixture_index}, {fixture_index + fixture_count}) "
+            f"is out of range for {len(fixtures)} fixtures"
+        )
 
     model, tokenizer = load_model_and_tokenizer(config)
-    fixture = fixtures[fixture_index]
-    prompt = build_prompt(tokenizer, config, fixture.source_text)
+    prompts = [
+        build_prompt(tokenizer, config, fixture.source_text)
+        for fixture in selected_fixtures
+    ]
+    max_tokens = [
+        max_tokens_for_fixture(config, fixture)
+        for fixture in selected_fixtures
+    ]
     result = profile_batch_generate_metal(
         batch_generate,
         model,
         tokenizer,
-        [prompt],
-        max_tokens=max_tokens_for_fixture(config, fixture),
+        prompts,
+        max_tokens=max_tokens,
         trace_path=args.metal_profile_path,
     )
     print(json.dumps(result, indent=2))
