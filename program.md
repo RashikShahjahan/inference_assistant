@@ -1,7 +1,6 @@
 # inference_assistant
 
-This repository is set up for the `inference_assistant` research assistant workflow for inference benchmarking for translation tasks.
-
+This is a tool to assist in optimizing batched inference on Apple Silicon for translation tasks.
 ## Setup
 
 To start or resume a run, work through this checklist:
@@ -102,11 +101,11 @@ The benchmark owns this log. Do not hand-edit it during normal experimentation.
 ## Suggested workflow
 
 1. Inspect the current candidate in `generate.py` and the benchmark contract in `README.md`, `prepare.py`, and `config.json` when needed.
-2. Run the `capture_gpu_trace` OpenCode tool to capture a representative `batch_generate(...)` Metal profile and identify the hottest kernels or execution phases.
-3. Read the gpu trace using the apple_profiler MCP and explain the current bottleneck, risk, or opportunity based on that profile.
-4. Suggest experiment ideas that directly target the observed hotspots, then pick one concrete change and state the expected tradeoff.
-5. Implement the change in `generate.py`.
-6. Run the benchmark with the `benchmark_generate` OpenCode tool using a short description.
+2. Run the `capture_gpu_trace` tool to capture a representative `batch_generate(...)` Metal profile.
+3. Read the gpu trace using the apple_profiler MCP and analyze the results.
+4. Use the insights from the GPU trace analysis and the current `generate.py` code to suggest 3 most promising changes.
+5. Once the user selects a change or suggests their own, implement it in `generate.py`.
+6. Run the benchmark with the `benchmark_generate` tool with a short description.
 7. Summarize the outcome:
    - `promoted` means the full candidate beat the incumbent and `state/best_generate.py` was updated automatically.
    - `discard` means the candidate lost on throughput or violated the memory ceiling.
