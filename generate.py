@@ -157,7 +157,7 @@ class PromptProcessingBatch:
         model: nn.Module,
         uids: List[int],
         caches: List[List[Any]],
-        tokens: Optional[List[List[int]]] = None,
+        tokens: Optional[List[Optional[List[int]]]] = None,
         prefill_step_size: int = 2048,
         samplers: Optional[List[Callable[[mx.array], mx.array]]] = None,
         fallback_sampler: Optional[Callable[[mx.array], mx.array]] = None,
@@ -171,7 +171,7 @@ class PromptProcessingBatch:
         self.model = model
         self.uids = uids
         self.prompt_cache = _merge_caches(caches)
-        self.tokens = tokens if tokens is not None else [[] for _ in uids]
+        self.tokens = tokens if tokens is not None else [None] * len(uids)
 
         self.prefill_step_size = prefill_step_size
         self.samplers = samplers if samplers is not None else []
@@ -264,7 +264,8 @@ class PromptProcessingBatch:
             return
 
         for sti, ti in zip(self.tokens, tokens):
-            sti += ti
+            if sti is not None:
+                sti += ti
 
         lengths = [len(p) for p in tokens]
         max_length = max(lengths)
@@ -361,7 +362,7 @@ class GenerationBatch:
         uids: List[int],
         inputs: mx.array,
         prompt_cache: List[Any],
-        tokens: List[List[int]],
+        tokens: List[Optional[List[int]]],
         samplers: Optional[List[Callable[[mx.array], mx.array]]],
         fallback_sampler: Callable[[mx.array], mx.array],
         logits_processors: Optional[
@@ -392,7 +393,10 @@ class GenerationBatch:
         self._current_logprobs = []
         self._next_tokens = inputs
         self._next_logprobs = []
-        self._token_context = [TokenBuffer(t) for t in tokens]
+        self._uses_token_context = any(self.logits_processors)
+        self._token_context = (
+            [TokenBuffer(t or []) for t in tokens] if self._uses_token_context else []
+        )
         self._num_tokens = [0] * len(self.uids)
         self._matcher_states = [m.make_state() for m in state_machines]
 
@@ -411,6 +415,14 @@ class GenerationBatch:
         self.max_tokens.extend(batch.max_tokens)
         self.state_machines.extend(batch.state_machines)
 
+        if batch._uses_token_context and not self._uses_token_context:
+            self._token_context = [TokenBuffer(t or []) for t in self.tokens[: -len(batch.tokens)]]
+            self._uses_token_context = True
+        if self._uses_token_context and not batch._uses_token_context:
+            batch_token_context = [TokenBuffer(t or []) for t in batch.tokens]
+        else:
+            batch_token_context = batch._token_context
+
         if self._current_tokens is None:
             self._current_tokens = batch._current_tokens
             self._current_logprobs = batch._current_logprobs
@@ -427,7 +439,8 @@ class GenerationBatch:
             self._next_tokens = mx.concatenate([self._next_tokens, batch._next_tokens])
             self._next_logprobs.extend(batch._next_logprobs)
 
-        self._token_context.extend(batch._token_context)
+        if self._uses_token_context:
+            self._token_context.extend(batch_token_context)
         self._num_tokens.extend(batch._num_tokens)
         self._matcher_states.extend(batch._matcher_states)
 
@@ -440,7 +453,7 @@ class GenerationBatch:
         logits = logits[:, -1, :]
 
         token_context = []
-        if any(self.logits_processors):
+        if self._uses_token_context:
             token_context = [
                 tc.update_and_fetch(inputs[i : i + 1])
                 for i, tc in enumerate(self._token_context)
@@ -483,7 +496,8 @@ class GenerationBatch:
         mx.eval(*current_values)
         inputs = inputs.tolist()
         for sti, ti in zip(self.tokens, inputs):
-            sti.append(ti)
+            if sti is not None:
+                sti.append(ti)
 
         return inputs, self._current_logprobs
 
@@ -507,7 +521,8 @@ class GenerationBatch:
 
         self._next_tokens = self._next_tokens[keep] if keep else None
         self._next_logprobs = [self._next_logprobs[idx] for idx in keep]
-        self._token_context = [self._token_context[idx] for idx in keep]
+        if self._uses_token_context:
+            self._token_context = [self._token_context[idx] for idx in keep]
         self._num_tokens = [self._num_tokens[idx] for idx in keep]
         self._matcher_states = [self._matcher_states[idx] for idx in keep]
 
@@ -679,7 +694,7 @@ class BatchGenerator:
         prompts: List[List[int]],
         max_tokens: Optional[List[int]] = None,
         caches: Optional[List[List[Any]]] = None,
-        all_tokens: Optional[List[List[int]]] = None,
+        all_tokens: Optional[List[Optional[List[int]]]] = None,
         samplers: Optional[List[Callable[[mx.array], mx.array]]] = None,
         logits_processors: Optional[
             List[List[Callable[[mx.array, mx.array], mx.array]]]
@@ -701,7 +716,7 @@ class BatchGenerator:
         segments: List[List[List[int]]],
         max_tokens: Optional[List[int]] = None,
         caches: Optional[List[List[Any]]] = None,
-        all_tokens: Optional[List[List[int]]] = None,
+        all_tokens: Optional[List[Optional[List[int]]]] = None,
         samplers: Optional[List[Callable[[mx.array], mx.array]]] = None,
         logits_processors: Optional[
             List[List[Callable[[mx.array, mx.array], mx.array]]]
@@ -711,7 +726,7 @@ class BatchGenerator:
         uids = []
 
         max_tokens = max_tokens or [self.max_tokens] * len(segments)
-        all_tokens = all_tokens or [[] for _ in segments]
+        all_tokens = all_tokens if all_tokens is not None else [None] * len(segments)
         samplers = samplers or [None] * len(segments)
         logits_processors = logits_processors or (
             [self.logits_processors] * len(segments)
