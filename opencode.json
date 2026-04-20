@@ -18,6 +18,8 @@
     }
   },
   "permission": {
-    "apple_profiler_*": "allow"
+    "apple_profiler_*": "allow",
+    "benchmark_generate": "allow",
+    "capture_gpu_trace": "allow"
   }
 }

@@ -25,30 +25,35 @@ uv sync
 
 # 3. Set the memory ceiling in config.json, then seed the benchmark state
 uv run prepare.py
-
-# 4. Run the benchmark
-uv run generate.py --description "candidate change"
 ```
+
+Then run the `benchmark_generate` OpenCode tool with `description="candidate change"`.
 
 ## Project structure
 
 ```text
-prepare.py      - fixed benchmark setup, incumbent snapshot, and logging
-generate.py     - mutable batched generate-path candidate
-program.md      - research assistant instructions
-config.json     - benchmark contract and dataset selection
-pyproject.toml  - dependencies
-state/          - incumbent snapshot
-results.tsv     - append-only run log
+prepare.py        - fixed benchmark setup and shared loading helpers
+generate.py       - mutable batched generate-path candidate
+.opencode/tools/  - OpenCode benchmark and GPU trace tools
+program.md        - research assistant instructions
+config.json       - benchmark contract and dataset selection
+pyproject.toml    - dependencies
+state/            - incumbent snapshot
+results.tsv       - append-only run log
 ```
 
 ## Workflow
 
 1. Run `uv run prepare.py` once after changing the benchmark contract.
 2. Edit `generate.py`.
-3. Run `uv run generate.py --description "..."`.
+3. Run the `benchmark_generate` OpenCode tool.
 4. Benchmark runs automatically promote the candidate to `state/best_generate.py` when throughput improves and memory stays within the ceiling.
 5. Inspect `results.tsv` for experiment history.
+
+## OpenCode tools
+
+- `benchmark_generate`: runs `.opencode/tools/benchmark_generate.py` and returns the JSON benchmark summary.
+- `capture_gpu_trace`: runs `.opencode/tools/capture_gpu_trace.py` with `MTL_CAPTURE_ENABLED=1` and returns the trace metadata JSON.
 
 ## Config
 
