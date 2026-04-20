@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from mlx_lm import batch_generate as mlx_lm_batch_generate
+
 from prepare import (
     GENERATE_PATH,
     INCUMBENT_PATH,
@@ -157,12 +159,18 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     references: list[str] = []
 
     for fixture_max_tokens, prompt_batch in prompts_by_max_tokens.items():
-        batch_results = generate_fn(
+        batch_payload = generate_fn(
             model,
             tokenizer,
             prompt_batch,
             max_tokens=fixture_max_tokens,
         )
+        batch_output_tokens: int | None = None
+        if isinstance(batch_payload, dict):
+            batch_results = batch_payload["results"]
+            batch_output_tokens = int(batch_payload.get("output_tokens", 0))
+        else:
+            batch_results = batch_payload
         if len(batch_results) != len(prompt_batch):
             raise RuntimeError(
                 "Candidate returned the wrong number of outputs for the prompt batch"
@@ -172,8 +180,11 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
         ):
             hypotheses.append(str(result["text"]).strip())
             references.append(fixture.reference_text)
-        for result in batch_results:
-            total_output_tokens += len(result["token_ids"])
+        if batch_output_tokens is not None:
+            total_output_tokens += batch_output_tokens
+        else:
+            for result in batch_results:
+                total_output_tokens += len(result["token_ids"])
 
     if callable(synchronize):
         synchronize()
@@ -210,6 +221,19 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     }
 
 
+def mlx_lm_generate_text(model, tokenizer, prompt_tokens_batch, *, max_tokens: int):
+    response = mlx_lm_batch_generate(
+        model,
+        tokenizer,
+        prompt_tokens_batch,
+        max_tokens=max_tokens,
+    )
+    return {
+        "results": [{"text": text, "token_ids": []} for text in response.texts],
+        "output_tokens": response.stats.generation_tokens,
+    }
+
+
 def load_module_from_path(path: Path, module_name: str):
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
@@ -238,6 +262,9 @@ def compare_candidate(config: Config, fixtures, description: str, generate_fn):
     candidate_file_hash = candidate_hash(GENERATE_PATH)
     incumbent_file_hash = candidate_hash(INCUMBENT_PATH)
     model, tokenizer = load_model_and_tokenizer(config)
+    mlx_lm_metrics = benchmark_generate_fn(
+        mlx_lm_generate_text, model, tokenizer, config, fixtures
+    )
     candidate_metrics = benchmark_generate_fn(generate_fn, model, tokenizer, config, fixtures)
 
     if candidate_file_hash == incumbent_file_hash:
@@ -278,6 +305,11 @@ def compare_candidate(config: Config, fixtures, description: str, generate_fn):
             "full",
             candidate_file_hash,
             incumbent_file_hash,
+            (
+                f"{float(mlx_lm_metrics.get('output_tokens_per_sec', 0.0)):.4f}"
+                if mlx_lm_metrics.get("ok")
+                else ""
+            ),
             f"{float(candidate_metrics.get('output_tokens_per_sec', 0.0)):.4f}",
             f"{float(incumbent_metrics.get('output_tokens_per_sec', 0.0)):.4f}",
             f"{float(candidate_metrics.get('peak_metal_mb', 0.0)):.1f}",
@@ -290,6 +322,7 @@ def compare_candidate(config: Config, fixtures, description: str, generate_fn):
         "run_id": run_identifier,
         "mode": "full",
         "description": description,
+        "mlx_lm": mlx_lm_metrics,
         "candidate": candidate_metrics,
         "incumbent": incumbent_metrics,
         "status": status,

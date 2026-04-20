@@ -13,6 +13,10 @@ GENERATE_PATH = ROOT / "generate.py"
 RESULTS_PATH = ROOT / "results.tsv"
 STATE_DIR = ROOT / "state"
 INCUMBENT_PATH = STATE_DIR / "best_generate.py"
+RESULTS_HEADER = (
+    "run_id\tmode\tcandidate_hash\tincumbent_hash\tmlx_lm_tps\tcandidate_tps\t"
+    "incumbent_tps\tpeak_metal_mb\tstatus\tdescription\n"
+)
 
 
 @dataclass(frozen=True)
@@ -170,12 +174,36 @@ def max_tokens_for_fixture(config: Config, fixture: Fixture) -> int:
 
 
 def ensure_results_header():
-    if RESULTS_PATH.exists():
+    if not RESULTS_PATH.exists():
+        RESULTS_PATH.write_text(RESULTS_HEADER, encoding="utf-8")
         return
-    RESULTS_PATH.write_text(
-        "run_id\tmode\tcandidate_hash\tincumbent_hash\tcandidate_tps\tincumbent_tps\tpeak_metal_mb\tstatus\tdescription\n",
-        encoding="utf-8",
+
+    lines = RESULTS_PATH.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        RESULTS_PATH.write_text(RESULTS_HEADER, encoding="utf-8")
+        return
+    if f"{lines[0]}\n" == RESULTS_HEADER:
+        return
+
+    legacy_header = (
+        "run_id\tmode\tcandidate_hash\tincumbent_hash\tcandidate_tps\t"
+        "incumbent_tps\tpeak_metal_mb\tstatus\tdescription"
     )
+    if lines[0] != legacy_header:
+        raise ValueError(f"Unexpected results.tsv header: {lines[0]!r}")
+
+    migrated_lines = [RESULTS_HEADER.rstrip("\n")]
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) != 9:
+            raise ValueError(f"Unexpected results.tsv row: {line!r}")
+        parts.insert(4, "")
+        migrated_lines.append("\t".join(parts))
+    RESULTS_PATH.write_text("\n".join(migrated_lines) + "\n", encoding="utf-8")
+
+
 def promote_candidate():
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copy2(GENERATE_PATH, INCUMBENT_PATH)

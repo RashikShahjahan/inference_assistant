@@ -10,7 +10,7 @@ The repo intentionally keeps the workflow small:
 - `generate.py` is the only file you tune. It delegates comparison to the fixed benchmark.
 - `config.json` defines the model, dataset slice, and memory ceiling.
 
-Performance is measured as `output_tokens_per_sec`. The benchmark also reports `chrf_score` against the same dataset fixtures using `sacrebleu`, and candidates are discarded if quality regresses versus the incumbent. `max_peak_metal_mb` is a hard limit.
+Performance is measured as `output_tokens_per_sec`. The benchmark also reports `chrf_score` against the same dataset fixtures using `sacrebleu`, and candidates are discarded if quality regresses versus the incumbent. Each run also reports an `mlx_lm.batch_generate` baseline on the same workload. `max_peak_metal_mb` is a hard limit.
 
 ## Quick start
 
@@ -75,7 +75,9 @@ results.tsv       - append-only run log
 
 `dataset_reference_field` is the reference translation field used for quality scoring on the same fixtures.
 
-Every benchmark uses one warmup run followed by one measured pass.
+Every benchmark uses one warmup run followed by one measured pass for `mlx_lm.batch_generate`, the current candidate, and the incumbent snapshot.
+
+`results.tsv` includes `mlx_lm_tps` alongside candidate and incumbent throughput so you can track progress against both baselines over time.
 
 ## License
 
