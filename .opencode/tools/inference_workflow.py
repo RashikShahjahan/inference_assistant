@@ -50,10 +50,6 @@ def profile_batch_generate_metal(
         else:
             trace_path.unlink()
 
-    synchronize = getattr(mx, "synchronize", None)
-    reset_peak_memory = getattr(mx, "reset_peak_memory", None)
-    get_peak_memory = getattr(mx, "get_peak_memory", None)
-
     if warmup:
         batch_generate_fn(
             model,
@@ -62,15 +58,10 @@ def profile_batch_generate_metal(
             max_tokens=max_tokens,
             **kwargs,
         )
-        if callable(synchronize):
-            synchronize()
+        mx.synchronize()
 
-    if callable(reset_peak_memory):
-        reset_peak_memory()
-    else:
-        mx.metal.reset_peak_memory()
-    if callable(synchronize):
-        synchronize()
+    mx.metal.reset_peak_memory()
+    mx.synchronize()
 
     started = time.perf_counter()
     capture_started = False
@@ -84,8 +75,7 @@ def profile_batch_generate_metal(
             max_tokens=max_tokens,
             **kwargs,
         )
-        if callable(synchronize):
-            synchronize()
+        mx.synchronize()
     except RuntimeError as exc:
         if "Capture layer is not inserted" in str(exc):
             raise RuntimeError(
@@ -97,11 +87,7 @@ def profile_batch_generate_metal(
             mx.metal.stop_capture()
 
     elapsed = time.perf_counter() - started
-    peak_memory_bytes = (
-        int(get_peak_memory())
-        if callable(get_peak_memory)
-        else int(mx.metal.get_peak_memory())
-    )
+    peak_memory_bytes = int(mx.metal.get_peak_memory())
 
     return {
         "trace_path": str(trace_path),
@@ -119,11 +105,9 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
 
     prompts: list[list[int]] = []
     chrf = CHRF()
-    fixture_count = 0
 
     for fixture in fixtures:
         prompts.append(build_prompt(tokenizer, config, fixture.source_text))
-        fixture_count += 1
 
     if prompts:
         generate_fn(
@@ -133,14 +117,8 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
             max_tokens=config.max_new_tokens,
         )
 
-    reset = getattr(mx, "reset_peak_memory", None)
-    if callable(reset):
-        reset()
-    else:
-        mx.metal.reset_peak_memory()
-    synchronize = getattr(mx, "synchronize", None)
-    if callable(synchronize):
-        synchronize()
+    mx.metal.reset_peak_memory()
+    mx.synchronize()
 
     started = time.perf_counter()
     total_output_tokens = 0
@@ -172,16 +150,10 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
         for result in batch_results:
             total_output_tokens += len(result["token_ids"])
 
-    if callable(synchronize):
-        synchronize()
+    mx.metal.synchronize()
 
     elapsed = time.perf_counter() - started
-    get_peak_memory = getattr(mx, "get_peak_memory", None)
-    peak_memory_bytes = (
-        int(get_peak_memory())
-        if callable(get_peak_memory)
-        else int(mx.metal.get_peak_memory())
-    )
+    peak_memory_bytes = int(mx.metal.get_peak_memory())
     peak_metal_mb = round(peak_memory_bytes / 1024 / 1024, 1)
     output_tokens_per_sec = 0.0 if elapsed <= 0 else total_output_tokens / elapsed
     within_memory_limit = peak_metal_mb <= float(config.max_peak_metal_mb)
@@ -194,7 +166,7 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     return {
         "ok": within_memory_limit,
         "mode": "full",
-        "fixture_count": fixture_count,
+        "fixture_count": len(prompts),
         "elapsed_seconds": round(elapsed, 4),
         "output_tokens": total_output_tokens,
         "output_tokens_per_sec": round(output_tokens_per_sec, 4),
