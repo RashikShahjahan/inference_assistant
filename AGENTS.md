@@ -92,7 +92,7 @@ If memory exceeds the ceiling, the candidate returns `failure_reason: "memory_li
 Every benchmark appends a row to `results.tsv` automatically. The file is tab-separated and has this header:
 
 ```tsv
-run_id	mode	candidate_hash	incumbent_hash	candidate_tps	incumbent_tps	peak_metal_mb	status	description
+run_id	candidate_hash	incumbent_hash	mlx_lm_tps	candidate_tps	incumbent_tps	peak_metal_mb	status	description
 ```
 
 The benchmark owns this log. Do not hand-edit it during normal experimentation.

@@ -14,7 +14,7 @@ RESULTS_PATH = ROOT / "results.tsv"
 STATE_DIR = ROOT / "state"
 INCUMBENT_PATH = STATE_DIR / "best_generate.py"
 RESULTS_HEADER = (
-    "run_id\tmode\tcandidate_hash\tincumbent_hash\tmlx_lm_tps\tcandidate_tps\t"
+    "run_id\tcandidate_hash\tincumbent_hash\tmlx_lm_tps\tcandidate_tps\t"
     "incumbent_tps\tpeak_metal_mb\tstatus\tdescription\n"
 )
 

@@ -165,7 +165,6 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
 
     return {
         "ok": within_memory_limit,
-        "mode": "full",
         "fixture_count": len(prompts),
         "elapsed_seconds": round(elapsed, 4),
         "output_tokens": total_output_tokens,
@@ -260,7 +259,6 @@ def compare_candidate(config: Config, fixtures, description: str, generate_fn):
     append_results_row(
         [
             run_identifier,
-            "full",
             candidate_file_hash,
             incumbent_file_hash,
             (
@@ -278,7 +276,6 @@ def compare_candidate(config: Config, fixtures, description: str, generate_fn):
 
     return {
         "run_id": run_identifier,
-        "mode": "full",
         "description": description,
         "mlx_lm": mlx_lm_metrics,
         "candidate": candidate_metrics,
