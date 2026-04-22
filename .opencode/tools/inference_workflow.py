@@ -15,7 +15,6 @@ from prepare import (
     INCUMBENT_PATH,
     RESULTS_PATH,
     Config,
-    Fixture,
     build_prompt,
     ensure_results_header,
     load_model_and_tokenizer,
@@ -118,29 +117,20 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     import mlx.core as mx
     from sacrebleu.metrics import CHRF
 
-    prompts_by_max_tokens: dict[int, list[list[int]]] = {}
-    fixtures_by_max_tokens: dict[int, list[Fixture]] = {}
-    warmup_prompt_batch: list[list[int]] | None = None
-    warmup_max_tokens: int | None = None
+    prompts: list[list[int]] = []
     chrf = CHRF()
     fixture_count = 0
 
     for fixture in fixtures:
-        fixture_max_tokens = config.max_new_tokens
-        prompt = build_prompt(tokenizer, config, fixture.source_text)
-        if warmup_prompt_batch is None:
-            warmup_prompt_batch = [prompt]
-            warmup_max_tokens = fixture_max_tokens
-        prompts_by_max_tokens.setdefault(fixture_max_tokens, []).append(prompt)
-        fixtures_by_max_tokens.setdefault(fixture_max_tokens, []).append(fixture)
+        prompts.append(build_prompt(tokenizer, config, fixture.source_text))
         fixture_count += 1
 
-    if warmup_prompt_batch is not None and warmup_max_tokens is not None:
+    if prompts:
         generate_fn(
             model,
             tokenizer,
-            warmup_prompt_batch,
-            max_tokens=warmup_max_tokens,
+            [prompts[0]],
+            max_tokens=config.max_new_tokens,
         )
 
     reset = getattr(mx, "reset_peak_memory", None)
@@ -157,33 +147,30 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     hypotheses: list[str] = []
     references: list[str] = []
 
-    for fixture_max_tokens, prompt_batch in prompts_by_max_tokens.items():
-        batch_payload = generate_fn(
-            model,
-            tokenizer,
-            prompt_batch,
-            max_tokens=fixture_max_tokens,
+    batch_payload = generate_fn(
+        model,
+        tokenizer,
+        prompts,
+        max_tokens=config.max_new_tokens,
+    )
+    batch_output_tokens: int | None = None
+    if isinstance(batch_payload, dict):
+        batch_results = batch_payload["results"]
+        batch_output_tokens = int(batch_payload.get("output_tokens", 0))
+    else:
+        batch_results = batch_payload
+    if len(batch_results) != len(prompts):
+        raise RuntimeError(
+            "Candidate returned the wrong number of outputs for the prompt batch"
         )
-        batch_output_tokens: int | None = None
-        if isinstance(batch_payload, dict):
-            batch_results = batch_payload["results"]
-            batch_output_tokens = int(batch_payload.get("output_tokens", 0))
-        else:
-            batch_results = batch_payload
-        if len(batch_results) != len(prompt_batch):
-            raise RuntimeError(
-                "Candidate returned the wrong number of outputs for the prompt batch"
-            )
-        for fixture, result in zip(
-            fixtures_by_max_tokens[fixture_max_tokens], batch_results
-        ):
-            hypotheses.append(str(result["text"]).strip())
-            references.append(fixture.reference_text)
-        if batch_output_tokens is not None:
-            total_output_tokens += batch_output_tokens
-        else:
-            for result in batch_results:
-                total_output_tokens += len(result["token_ids"])
+    for fixture, result in zip(fixtures, batch_results):
+        hypotheses.append(str(result["text"]).strip())
+        references.append(fixture.reference_text)
+    if batch_output_tokens is not None:
+        total_output_tokens += batch_output_tokens
+    else:
+        for result in batch_results:
+            total_output_tokens += len(result["token_ids"])
 
     if callable(synchronize):
         synchronize()

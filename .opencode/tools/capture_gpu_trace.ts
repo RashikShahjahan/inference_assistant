@@ -15,6 +15,12 @@ export default tool({
       .nonnegative()
       .default(0)
       .describe("Fixture index to use for the representative batch_generate call"),
+    fixture_count: tool.schema
+      .number()
+      .int()
+      .positive()
+      .default(1)
+      .describe("Number of fixtures to include in the representative batch"),
   },
   async execute(args, context) {
     return runPythonTool(
@@ -24,6 +30,8 @@ export default tool({
         args.trace_path,
         "--metal-profile-fixture-index",
         String(args.fixture_index),
+        "--metal-profile-fixture-count",
+        String(args.fixture_count),
       ],
       { MTL_CAPTURE_ENABLED: "1" },
       context.worktree,
