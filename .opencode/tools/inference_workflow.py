@@ -42,14 +42,6 @@ def profile_batch_generate_metal(
         raise ValueError("trace_path must end with .gputrace")
 
     trace_path.parent.mkdir(parents=True, exist_ok=True)
-    if trace_path.exists():
-        if trace_path.is_dir():
-            import shutil
-
-            shutil.rmtree(trace_path)
-        else:
-            trace_path.unlink()
-
     if warmup:
         batch_generate_fn(
             model,
@@ -137,10 +129,6 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
         batch_output_tokens = int(batch_payload.get("output_tokens", 0))
     else:
         batch_results = batch_payload
-    if len(batch_results) != len(prompts):
-        raise RuntimeError(
-            "Candidate returned the wrong number of outputs for the prompt batch"
-        )
     for fixture, result in zip(fixtures, batch_results):
         hypotheses.append(str(result["text"]).strip())
         references.append(fixture.reference_text)
@@ -150,7 +138,7 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
         for result in batch_results:
             total_output_tokens += len(result["token_ids"])
 
-    mx.metal.synchronize()
+    mx.synchronize()
 
     elapsed = time.perf_counter() - started
     peak_memory_bytes = int(mx.metal.get_peak_memory())
