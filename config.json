@@ -9,5 +9,5 @@
   "dataset_fixture_limit": 16,
   "dataset_skip_bad_source": true,
   "max_new_tokens": 2048,
-  "max_peak_metal_mb": 12000
+  "max_peak_metal_mb": 6000
 }
