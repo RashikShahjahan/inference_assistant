@@ -19,7 +19,6 @@ from prepare import (
     build_prompt,
     ensure_results_header,
     load_model_and_tokenizer,
-    max_tokens_for_fixture,
     promote_candidate,
 )
 
@@ -127,7 +126,7 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
     fixture_count = 0
 
     for fixture in fixtures:
-        fixture_max_tokens = max_tokens_for_fixture(config, fixture)
+        fixture_max_tokens = config.max_new_tokens
         prompt = build_prompt(tokenizer, config, fixture.source_text)
         if warmup_prompt_batch is None:
             warmup_prompt_batch = [prompt]

@@ -29,13 +29,15 @@ Then run the `benchmark_generate` OpenCode tool with `description="candidate cha
 - `source_lang`
 - `target_lang`
 - `dataset_repo`
-- `dataset_file`
 - `dataset_source_field`
 - `dataset_reference_field`
 - `dataset_fixture_limit`
-- `dataset_skip_bad_source`
 - `max_new_tokens`
 - `max_peak_metal_mb`
+
+`dataset_repo` is expected to contain exactly one `.jsonl` file.
+
+`dataset_fixture_limit` caps how many dataset rows are loaded.
 
 `max_peak_metal_mb` must be set to a positive value before `uv run prepare.py` or benchmark runs will execute.
 

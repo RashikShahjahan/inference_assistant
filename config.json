@@ -2,12 +2,10 @@
   "model": "mlx-community/translategemma-4b-it-4bit",
   "source_lang": "bn",
   "target_lang": "en",
-  "dataset_repo": "google/wmt24pp",
-  "dataset_file": "en-bn_IN.jsonl",
+  "dataset_repo": "Rashik24/wmt24pp-en-bn",
   "dataset_source_field": "target",
   "dataset_reference_field": "source",
   "dataset_fixture_limit": 16,
-  "dataset_skip_bad_source": true,
   "max_new_tokens": 2048,
   "max_peak_metal_mb": 6000
 }

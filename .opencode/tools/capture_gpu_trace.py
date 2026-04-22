@@ -66,7 +66,6 @@ def main() -> int:
             load_config,
             load_fixtures,
             load_model_and_tokenizer,
-            max_tokens_for_fixture,
             require_memory_limit,
         )
 
@@ -95,10 +94,7 @@ def main() -> int:
             build_prompt(tokenizer, config, fixture.source_text)
             for fixture in selected_fixtures
         ]
-        max_tokens = [
-            max_tokens_for_fixture(config, fixture)
-            for fixture in selected_fixtures
-        ]
+        max_tokens = [config.max_new_tokens] * len(selected_fixtures)
         result = profile_batch_generate_metal(
             batch_generate,
             model,
