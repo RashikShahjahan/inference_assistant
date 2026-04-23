@@ -44,13 +44,7 @@ Use me when you want actionable performance insights from trace data and you can
 DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer" xctrace version
 ```
 
-2. Export the trace table of contents.
-
-Use the `trace_toc` tool first. If you need the raw command, this is the equivalent:
-
-```bash
-DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer" xctrace export --input "path/to/trace.trace" --toc
-```
+2. Export the trace table of contents using the `trace_toc` tool.
 
 3. Inspect the exported TOC and identify the run number, process, and relevant data tables.
 
@@ -188,7 +182,6 @@ Interpretation:
 - `actual >> expected`: extra fragmentation, unfused ops, or repeated passes
 - `actual << expected`: some work may already be fused
 
-This comparison is often easier after exporting structured tables than by visual inspection alone.
 
 ### 5. Identify Inefficiency Patterns
 
