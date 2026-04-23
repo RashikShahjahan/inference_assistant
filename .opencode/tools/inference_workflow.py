@@ -15,187 +15,64 @@ from prepare import (
     INCUMBENT_PATH,
     RESULTS_PATH,
     Config,
-    Fixture,
     build_prompt,
     ensure_results_header,
     load_model_and_tokenizer,
-    max_tokens_for_fixture,
     promote_candidate,
 )
-
-
-def profile_batch_generate_metal(
-    batch_generate_fn,
-    model,
-    tokenizer,
-    prompts,
-    *,
-    max_tokens: int | list[int] = 128,
-    trace_path: str | Path = "state/batch_generate_profile.gputrace",
-    warmup: bool = True,
-    **kwargs,
-) -> dict[str, Any]:
-    import mlx.core as mx
-
-    trace_path = Path(trace_path)
-    if not mx.metal.is_available():
-        raise RuntimeError("Metal profiling requires an Apple Silicon / Metal device")
-    if trace_path.suffix != ".gputrace":
-        raise ValueError("trace_path must end with .gputrace")
-
-    trace_path.parent.mkdir(parents=True, exist_ok=True)
-    if trace_path.exists():
-        if trace_path.is_dir():
-            import shutil
-
-            shutil.rmtree(trace_path)
-        else:
-            trace_path.unlink()
-
-    synchronize = getattr(mx, "synchronize", None)
-    reset_peak_memory = getattr(mx, "reset_peak_memory", None)
-    get_peak_memory = getattr(mx, "get_peak_memory", None)
-
-    if warmup:
-        batch_generate_fn(
-            model,
-            tokenizer,
-            prompts,
-            max_tokens=max_tokens,
-            **kwargs,
-        )
-        if callable(synchronize):
-            synchronize()
-
-    if callable(reset_peak_memory):
-        reset_peak_memory()
-    else:
-        mx.metal.reset_peak_memory()
-    if callable(synchronize):
-        synchronize()
-
-    started = time.perf_counter()
-    capture_started = False
-    try:
-        mx.metal.start_capture(str(trace_path))
-        capture_started = True
-        response = batch_generate_fn(
-            model,
-            tokenizer,
-            prompts,
-            max_tokens=max_tokens,
-            **kwargs,
-        )
-        if callable(synchronize):
-            synchronize()
-    except RuntimeError as exc:
-        if "Capture layer is not inserted" in str(exc):
-            raise RuntimeError(
-                "Metal capture requires launching the process with MTL_CAPTURE_ENABLED=1"
-            ) from exc
-        raise
-    finally:
-        if capture_started:
-            mx.metal.stop_capture()
-
-    elapsed = time.perf_counter() - started
-    peak_memory_bytes = (
-        int(get_peak_memory())
-        if callable(get_peak_memory)
-        else int(mx.metal.get_peak_memory())
-    )
-
-    return {
-        "trace_path": str(trace_path),
-        "prompt_count": len(prompts),
-        "output_tokens": sum(len(token_ids) for token_ids in response.token_ids),
-        "elapsed_seconds": round(elapsed, 4),
-        "peak_metal_mb": round(peak_memory_bytes / 1024 / 1024, 1),
-        "warmup": warmup,
-    }
 
 
 def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixtures):
     import mlx.core as mx
     from sacrebleu.metrics import CHRF
 
-    prompts_by_max_tokens: dict[int, list[list[int]]] = {}
-    fixtures_by_max_tokens: dict[int, list[Fixture]] = {}
-    warmup_prompt_batch: list[list[int]] | None = None
-    warmup_max_tokens: int | None = None
+    prompts: list[list[int]] = []
     chrf = CHRF()
-    fixture_count = 0
 
     for fixture in fixtures:
-        fixture_max_tokens = max_tokens_for_fixture(config, fixture)
-        prompt = build_prompt(tokenizer, config, fixture.source_text)
-        if warmup_prompt_batch is None:
-            warmup_prompt_batch = [prompt]
-            warmup_max_tokens = fixture_max_tokens
-        prompts_by_max_tokens.setdefault(fixture_max_tokens, []).append(prompt)
-        fixtures_by_max_tokens.setdefault(fixture_max_tokens, []).append(fixture)
-        fixture_count += 1
+        prompts.append(build_prompt(tokenizer, config, fixture.source_text))
 
-    if warmup_prompt_batch is not None and warmup_max_tokens is not None:
+    if prompts:
         generate_fn(
             model,
             tokenizer,
-            warmup_prompt_batch,
-            max_tokens=warmup_max_tokens,
+            [prompts[0]],
+            max_tokens=config.max_new_tokens,
         )
 
-    reset = getattr(mx, "reset_peak_memory", None)
-    if callable(reset):
-        reset()
-    else:
-        mx.metal.reset_peak_memory()
-    synchronize = getattr(mx, "synchronize", None)
-    if callable(synchronize):
-        synchronize()
+    mx.metal.reset_peak_memory()
+    mx.synchronize()
 
     started = time.perf_counter()
     total_output_tokens = 0
     hypotheses: list[str] = []
     references: list[str] = []
 
-    for fixture_max_tokens, prompt_batch in prompts_by_max_tokens.items():
-        batch_payload = generate_fn(
-            model,
-            tokenizer,
-            prompt_batch,
-            max_tokens=fixture_max_tokens,
-        )
-        batch_output_tokens: int | None = None
-        if isinstance(batch_payload, dict):
-            batch_results = batch_payload["results"]
-            batch_output_tokens = int(batch_payload.get("output_tokens", 0))
-        else:
-            batch_results = batch_payload
-        if len(batch_results) != len(prompt_batch):
-            raise RuntimeError(
-                "Candidate returned the wrong number of outputs for the prompt batch"
-            )
-        for fixture, result in zip(
-            fixtures_by_max_tokens[fixture_max_tokens], batch_results
-        ):
-            hypotheses.append(str(result["text"]).strip())
-            references.append(fixture.reference_text)
-        if batch_output_tokens is not None:
-            total_output_tokens += batch_output_tokens
-        else:
-            for result in batch_results:
-                total_output_tokens += len(result["token_ids"])
+    batch_payload = generate_fn(
+        model,
+        tokenizer,
+        prompts,
+        max_tokens=config.max_new_tokens,
+    )
+    batch_output_tokens: int | None = None
+    if isinstance(batch_payload, dict):
+        batch_results = batch_payload["results"]
+        batch_output_tokens = int(batch_payload.get("output_tokens", 0))
+    else:
+        batch_results = batch_payload
+    for fixture, result in zip(fixtures, batch_results):
+        hypotheses.append(str(result["text"]).strip())
+        references.append(fixture.reference_text)
+    if batch_output_tokens is not None:
+        total_output_tokens += batch_output_tokens
+    else:
+        for result in batch_results:
+            total_output_tokens += len(result["token_ids"])
 
-    if callable(synchronize):
-        synchronize()
+    mx.synchronize()
 
     elapsed = time.perf_counter() - started
-    get_peak_memory = getattr(mx, "get_peak_memory", None)
-    peak_memory_bytes = (
-        int(get_peak_memory())
-        if callable(get_peak_memory)
-        else int(mx.metal.get_peak_memory())
-    )
+    peak_memory_bytes = int(mx.metal.get_peak_memory())
     peak_metal_mb = round(peak_memory_bytes / 1024 / 1024, 1)
     output_tokens_per_sec = 0.0 if elapsed <= 0 else total_output_tokens / elapsed
     within_memory_limit = peak_metal_mb <= float(config.max_peak_metal_mb)
@@ -207,8 +84,7 @@ def benchmark_generate_fn(generate_fn, model, tokenizer, config: Config, fixture
 
     return {
         "ok": within_memory_limit,
-        "mode": "full",
-        "fixture_count": fixture_count,
+        "fixture_count": len(prompts),
         "elapsed_seconds": round(elapsed, 4),
         "output_tokens": total_output_tokens,
         "output_tokens_per_sec": round(output_tokens_per_sec, 4),
@@ -302,7 +178,6 @@ def compare_candidate(config: Config, fixtures, description: str, generate_fn):
     append_results_row(
         [
             run_identifier,
-            "full",
             candidate_file_hash,
             incumbent_file_hash,
             (
@@ -320,7 +195,6 @@ def compare_candidate(config: Config, fixtures, description: str, generate_fn):
 
     return {
         "run_id": run_identifier,
-        "mode": "full",
         "description": description,
         "mlx_lm": mlx_lm_metrics,
         "candidate": candidate_metrics,

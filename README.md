@@ -2,15 +2,6 @@
 
 This repo is a compact inference benchmarking setup for optimizing inference throughput on Apple Silicon.
 
-## How it works
-
-The repo intentionally keeps the workflow small:
-
-- `prepare.py` owns the fixed benchmark contract, setup, incumbent snapshot, and result logging.
-- `generate.py` is the only file you tune. It delegates comparison to the fixed benchmark.
-- `config.json` defines the model, dataset slice, and memory ceiling.
-
-Performance is measured as `output_tokens_per_sec`. The benchmark also reports `chrf_score` against the same dataset fixtures using `sacrebleu`, and candidates are discarded if quality regresses versus the incumbent. Each run also reports an `mlx_lm.batch_generate` baseline on the same workload. `max_peak_metal_mb` is a hard limit.
 
 ## Quick start
 
@@ -29,31 +20,20 @@ uv run prepare.py
 
 Then run the `benchmark_generate` OpenCode tool with `description="candidate change"`.
 
-## Project structure
 
-```text
-prepare.py        - fixed benchmark setup and shared loading helpers
-generate.py       - mutable batched generate-path candidate
-.opencode/tools/  - OpenCode benchmark and GPU trace tools
-program.md        - research assistant instructions
-config.json       - benchmark contract and dataset selection
-pyproject.toml    - dependencies
-state/            - incumbent snapshot
-results.tsv       - append-only run log
+## Trace analysis
+
+Use the `capture_gpu_trace` OpenCode tool to record a representative Instruments Metal trace at
+`state/batch_generate_profile.trace`.
+
+Inspect the trace contents with the `trace_toc` OpenCode tool, then use `xctrace export` from `bash`
+for targeted table exports. If the active developer directory is still Command Line Tools, prefix
+direct `xctrace` commands with:
+
+```bash
+DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 ```
 
-## Workflow
-
-1. Run `uv run prepare.py` once after changing the benchmark contract.
-2. Edit `generate.py`.
-3. Run the `benchmark_generate` OpenCode tool.
-4. Benchmark runs automatically promote the candidate to `state/best_generate.py` when throughput improves and memory stays within the ceiling.
-5. Inspect `results.tsv` for experiment history.
-
-## OpenCode tools
-
-- `benchmark_generate`: runs `.opencode/tools/benchmark_generate.py` and returns the JSON benchmark summary.
-- `capture_gpu_trace`: runs `.opencode/tools/capture_gpu_trace.py` with `MTL_CAPTURE_ENABLED=1` and returns the trace metadata JSON.
 
 ## Config
 
@@ -63,13 +43,15 @@ results.tsv       - append-only run log
 - `source_lang`
 - `target_lang`
 - `dataset_repo`
-- `dataset_file`
 - `dataset_source_field`
 - `dataset_reference_field`
 - `dataset_fixture_limit`
-- `dataset_skip_bad_source`
 - `max_new_tokens`
 - `max_peak_metal_mb`
+
+`dataset_repo` is expected to contain exactly one `.jsonl` file.
+
+`dataset_fixture_limit` caps how many dataset rows are loaded.
 
 `max_peak_metal_mb` must be set to a positive value before `uv run prepare.py` or benchmark runs will execute.
 

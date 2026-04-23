@@ -7,7 +7,7 @@ To start or resume a run, work through this checklist:
 
 1. Ensure `config.json` sets `max_peak_metal_mb` to a positive value.
 2. Read the in-scope files for full context:
-   - `README.md` - repository context and workflow.
+   - `README.md` - repository context.
    - `prepare.py` - fixed benchmark contract, fixture loading, memory checks, incumbent promotion, and results logging. Do not modify during normal experimentation.
    - `generate.py` - the only file you tune.
    - `config.json` - fixed dataset, model, and memory configuration for the current run.
@@ -18,7 +18,6 @@ To start or resume a run, work through this checklist:
 ## Working style
 
 Each experiment benchmarks `generate.py` against the incumbent snapshot in `state/best_generate.py`.
-
 
 
 **What you CAN do:**
@@ -93,7 +92,7 @@ If memory exceeds the ceiling, the candidate returns `failure_reason: "memory_li
 Every benchmark appends a row to `results.tsv` automatically. The file is tab-separated and has this header:
 
 ```tsv
-run_id	mode	candidate_hash	incumbent_hash	candidate_tps	incumbent_tps	peak_metal_mb	status	description
+run_id	candidate_hash	incumbent_hash	mlx_lm_tps	candidate_tps	incumbent_tps	peak_metal_mb	status	description
 ```
 
 The benchmark owns this log. Do not hand-edit it during normal experimentation.
@@ -101,9 +100,9 @@ The benchmark owns this log. Do not hand-edit it during normal experimentation.
 ## Suggested workflow
 
 1. Inspect the current candidate in `generate.py` and the benchmark contract in `README.md`, `prepare.py`, and `config.json` when needed.
-2. Run the `capture_gpu_trace` tool to capture a representative `batch_generate(...)` Metal profile.
-3. Read the gpu trace using the apple_profiler MCP and analyze the results.
-4. Use the insights from the GPU trace analysis and the current `generate.py` code to suggest 3 most promising changes.
+2. Run the `capture_gpu_trace` tool to capture a representative `batch_generate(...)` Instruments Metal trace.
+3. Export and analyze the trace using `xctrace` and the `gpu-trace-analysis` skill.
+4. Use the insights from the analysis and the current `generate.py` code to suggest 3 most promising changes.
 5. Once the user selects a change or suggests their own, implement it in `generate.py`.
 6. Run the benchmark with the `benchmark_generate` tool with a short description.
 7. Summarize the outcome:
