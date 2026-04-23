@@ -9,22 +9,19 @@ metadata:
 
 ## What I do
 
-I analyze Apple GPU and Metal traces using `xctrace` through the `bash` tool.
+I analyze Insyruments traces using `xctrace` through the `bash` tool.
 I follow a fixed 5-step reasoning process:
 
 1. Establish the baseline inference window.
 2. Identify the critical path.
 3. Measure time attribution.
 4. Record trace-observed inefficiencies.
-5. Prioritize and hypothesize optimizations.
 
 Use me when you want actionable performance insights from trace data and you can inspect that trace with `xctrace`.
 
 ## Preconditions
 
-- `xctrace` must be runnable from `bash`. This requires full Xcode, not just Command Line Tools.
 - If Command Line Tools is the active developer directory, use `DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"` for direct `xctrace` commands.
-- Preferred input is an Instruments `.trace` document. `xctrace export` is documented for `.trace` files.
 - If no `.trace` exists yet, start by using `capture_gpu_trace`.
 
 ## Repo-Specific Guidance
@@ -32,8 +29,6 @@ Use me when you want actionable performance insights from trace data and you can
 - Use the `bash` tool to run `xctrace` directly.
 - Start with the `trace_toc` tool to inspect the trace contents before making any claims.
 - Export only the tables needed for analysis with `xctrace export --xpath ...`.
-- Keep the work focused on analysis: measure the bottleneck, explain it, and turn it into concrete `generate.py` optimization ideas.
-- Tie recommendations back to the repository goal: improve `output_tokens_per_sec` without regressing quality or exceeding memory limits.
 
 ## Command Workflow
 
@@ -150,15 +145,7 @@ Optimize by time share, not by event count alone.
 
 ### 4. Record Trace-Observed Inefficiencies
 
-Only include issues that are directly supported by exported trace data. Do not rely on a fixed anti-pattern catalog or numeric thresholds.
-
-Look for and record any of the following when they are present in the trace:
-
-- repeated GPU idle gaps inside the inference window
-- repeated CPU submission or synchronization waits
-- transfer or blit events that take measurable time
-- extra kernel launches or repeated event sequences within the inference window
-- repeated short kernel groups that coincide with idle gaps or host-side waits
+Only include issues that are directly supported by exported trace data.
 
 For each issue you report, include:
 
@@ -167,36 +154,6 @@ For each issue you report, include:
 - why it matters for end-to-end inference time
 
 If the trace does not support a particular issue category, say so rather than inferring it.
-
-### 5. Prioritize and Hypothesize
-
-Turn the measurements into an optimization plan.
-
-Use this prioritization framework:
-
-- high impact, low effort
-- high impact, medium effort
-- medium impact, medium effort
-- low impact, high effort
-
-Example hypothesis:
-
-```text
-Bottleneck: fragmented matmul-heavy execution
-Evidence:
-- matmul kernels = 24 ms / 42 ms total (57%)
-- repeated matmul launch groups within the same inference window
-- repeated 0.5-1.0 ms gaps between kernel groups
-Expected improvement:
-- reduced end-to-end inference time if launch fragmentation and synchronization overhead are lowered
-Proposed fix:
-- replace manual attention sequence with fused MLX attention path
-- reduce eager sync points
-- batch operations where possible
-```
-
-Focus the recommendations on code changes that can plausibly be made in `generate.py` or the generation flow around it. Do not stop at trace description; convert the trace evidence into the smallest high-leverage code changes.
-
 
 ## Output Template
 
@@ -234,22 +191,8 @@ Top operations by total time:
 |          |       |          |        |                |
 
 ## 4. Trace-Observed Issues
-- GPU idle gaps: ___
-- Transfer or blit events: ___
-- CPU submission or synchronization waits: ___
-- Extra launches or repeated event sequences: ___
-- Dominant issue: ___
-
-## 5. Prioritized Actions
-1. ___
-2. ___
-3. ___
-
-## Evidence-Based Hypothesis
-- Bottleneck: ___
-- Evidence: ___
-- Expected improvement: ___
-- Proposed fix: ___
+- first issue
+- next issue
 ```
 
 ## Working Style
@@ -260,4 +203,4 @@ Top operations by total time:
 - Be quantitative and specific.
 - Prefer direct measurements over guesses.
 - If `xctrace` is unavailable or the input is not a `.trace` file, state the blocker immediately.
-- Tie every recommendation back to evidence from the trace.
+
