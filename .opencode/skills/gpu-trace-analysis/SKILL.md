@@ -1,6 +1,6 @@
 ---
-name: gpu-trace-analysis
-description: Analyze GPU traces step by step and turn them into prioritized optimization actions.
+name: trace-analysis
+description: Analyze Instruments traces step by step and turn them into prioritized optimization actions.
 compatibility: opencode
 metadata:
   audience: performance-engineering
@@ -9,44 +9,30 @@ metadata:
 
 ## What I do
 
-I analyze Insyruments traces using `xctrace` through the `bash` tool.
-I follow a fixed 5-step reasoning process:
+I analyze Instruments traces using the repository's trace tools.
+I follow a fixed 4-step reasoning process:
 
 1. Establish the baseline inference window.
 2. Identify the critical path.
 3. Measure time attribution.
 4. Record trace-observed inefficiencies.
 
-Use me when you want actionable performance insights from trace data and you can inspect that trace with `xctrace`.
+Use me when you want actionable performance insights from trace data and you can inspect that trace with the available tools.
 
 ## Preconditions
 
-- If Command Line Tools is the active developer directory, use `DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"` for direct `xctrace` commands.
-- If no `.trace` exists yet, start by using `capture_gpu_trace`.
+- If no `.trace` exists yet, start by using `capture_trace`.
 
-## Repo-Specific Guidance
-
-- Use the `bash` tool to run `xctrace` directly.
-- Start with the `trace_toc` tool to inspect the trace contents before making any claims.
-- Export only the tables needed for analysis with `xctrace export --xpath ...`.
 
 ## Command Workflow
 
-1. Verify that `xctrace` is available.
+1. Export the trace table of contents using the `trace_toc` tool.
 
-```bash
-DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer" xctrace version
-```
+2. Inspect the exported TOC and identify the run number, process, and relevant data tables.
 
-2. Export the trace table of contents using the `trace_toc` tool.
+3. Export only the entities needed for analysis with `trace_export_table` when the table schema is known.
 
-3. Inspect the exported TOC and identify the run number, process, and relevant data tables.
-
-4. Export only the entities needed for analysis.
-
-```bash
-DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer" xctrace export --input "path/to/trace.trace" --xpath '/trace-toc/run[@number="1"]/data/table[@schema="..."]'
-```
+4. Use `trace_query_xpath` only when you need a more specific XPath than a schema-level export.
 
 5. Repeat exports until you can answer the analysis questions below with evidence.
 
@@ -170,7 +156,7 @@ Use this exact structure when reporting results:
 - Inference end: ___
 - Total inference time: ___ ms
 - Hardware: ___
-- Trace source: `xctrace export`
+- Trace source: `trace_toc`, `trace_export_table`, and `trace_query_xpath`
 
 ## 2. Critical Path
 - GPU active time: ___ ms
@@ -197,10 +183,9 @@ Top operations by total time:
 
 ## Working Style
 
-- Use the `trace_toc` tool for TOC export, then `bash` + `xctrace` for targeted table exports.
-- Prefer the `DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"` prefix in direct `xctrace` commands unless the environment is already configured.
+- Use the `trace_toc` tool for TOC export, then `trace_export_table` for common table exports.
+- Use `trace_query_xpath` only when a schema-level export is not specific enough.
 - Start with the TOC, then export only the relevant tables.
 - Be quantitative and specific.
 - Prefer direct measurements over guesses.
-- If `xctrace` is unavailable or the input is not a `.trace` file, state the blocker immediately.
-
+- If the trace tools fail or the input is not a `.trace` file, state the blocker immediately.

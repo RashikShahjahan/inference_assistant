@@ -18,7 +18,7 @@ export default tool({
   },
   async execute(args, context) {
     return runPythonTool(
-      "capture_gpu_trace.py",
+      "capture_trace.py",
       ["--trace-path", args.trace_path, "--fixture-count", String(args.fixture_count)],
       {},
       context.worktree,

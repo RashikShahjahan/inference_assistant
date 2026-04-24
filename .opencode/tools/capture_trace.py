@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-TARGET_SCRIPT = Path(__file__).with_name("capture_gpu_trace_target.py")
+TARGET_SCRIPT = Path(__file__).with_name("capture_trace_target.py")
 XCTRACE_TEMPLATE = "Metal System Trace"
 MEASUREMENT_DELAY_SECONDS = 2.0
 XCODE_DEVELOPER_DIR = Path("/Applications/Xcode.app/Contents/Developer")
