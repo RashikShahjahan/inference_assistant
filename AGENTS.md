@@ -97,7 +97,7 @@ run_id	candidate_hash	incumbent_hash	mlx_lm_tps	candidate_tps	incumbent_tps	peak
 
 The benchmark owns this log. Do not hand-edit it during normal experimentation.
 
-## Suggested workflow
+## Workflow
 
 1. Inspect the current candidate in `generate.py` and the benchmark contract in `README.md`, `prepare.py`, and `config.json` when needed.
 2. Run the `capture_trace` tool to capture a representative `batch_generate(...)` Instruments Metal trace.

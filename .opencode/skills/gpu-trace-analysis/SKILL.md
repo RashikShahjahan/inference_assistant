@@ -10,12 +10,11 @@ metadata:
 ## What I do
 
 I analyze Instruments traces using the repository's trace tools.
-I follow a fixed 4-step reasoning process:
+I follow a fixed 3-step reasoning process:
 
-1. Establish the baseline inference window.
-2. Identify the critical path.
-3. Measure time attribution.
-4. Record trace-observed inefficiencies.
+1. Identify the critical path.
+2. Measure time attribution.
+3. Record trace-observed inefficiencies.
 
 Use me when you want actionable performance insights from trace data and you can inspect that trace with the available tools.
 
@@ -40,44 +39,15 @@ Do not guess table schemas in advance. Use the TOC first, then export the specif
 
 ## Workflow
 
-### 1. Establish the Baseline
-
-Identify the exact inference window you care about.
-
-Locate the region using one or more of:
-
-- the target process name
-- known function names
-- signposts
-- repeated kernel groups corresponding to one inference call
-
-Record:
-
-- inference start timestamp
-- inference end timestamp
-- total duration in ms
-- run number
-- process name
-- exported tables used as evidence
-
-Example:
-
-```text
-Inference window:
-start = 12.184 s
-end   = 12.226 s
-total = 42.0 ms
-```
-
-Use signposts, process names, command-buffer labels, or repeated inference markers to isolate the window. If there are multiple plausible windows, state which one you chose and why.
-
-### 2. Identify the Critical Path
+### 1. Identify the Critical Path
 
 Determine whether total runtime is dominated by GPU execution, CPU-side submission/setup delays, or both.
 
+Use the measured post-warmup `batch_generate(...)` call captured by `capture_trace`; do not re-establish a separate baseline window unless the trace contains multiple plausible measured calls.
+
 Measure or estimate from exported tables:
 
-- total GPU execution time in the inference window
+- total GPU execution time in the measured inference window
 - GPU idle gaps between kernel groups
 - CPU activity around command submission
 - whether kernels are tightly packed or separated by waits
@@ -100,7 +70,7 @@ GPU idle gaps inside window: 4 ms
 Conclusion: primarily GPU-bound, with some CPU submission overhead
 ```
 
-### 3. Measure Time Attribution
+### 2. Measure Time Attribution
 
 Group events by operation or kernel family and sum total duration.
 
@@ -129,14 +99,14 @@ other               --       6.0       --       14.3%
 
 Optimize by time share, not by event count alone.
 
-### 4. Record Trace-Observed Inefficiencies
+### 3. Record Trace-Observed Inefficiencies
 
 Only include issues that are directly supported by exported trace data.
 
 For each issue you report, include:
 
 - the specific trace evidence
-- where it appears in the inference window
+- where it appears in the measured inference window
 - why it matters for end-to-end inference time
 
 If the trace does not support a particular issue category, say so rather than inferring it.
@@ -148,17 +118,13 @@ Use this exact structure when reporting results:
 ```markdown
 # CLI Trace Analysis: [Model Name] - [Date]
 
-## 1. Baseline
+## 1. Critical Path
 - Trace file: ___
 - Exported tables used: ___
 - Run number: ___
-- Inference start: ___
-- Inference end: ___
-- Total inference time: ___ ms
 - Hardware: ___
 - Trace source: `trace_toc`, `trace_export_table`, and `trace_query_xpath`
-
-## 2. Critical Path
+- Total inference time: ___ ms
 - GPU active time: ___ ms
 - GPU idle gap time: ___ ms
 - CPU submission/setup time: ___ ms
@@ -167,7 +133,7 @@ Use this exact structure when reporting results:
   - [ ] CPU-bound
   - [ ] Mixed
 
-## 3. Time Attribution
+## 2. Time Attribution
 Top operations by total time:
 
 | Operation | Count | Total ms | Avg ms | % of inference |
@@ -176,7 +142,7 @@ Top operations by total time:
 |          |       |          |        |                |
 |          |       |          |        |                |
 
-## 4. Trace-Observed Issues
+## 3. Trace-Observed Issues
 - first issue
 - next issue
 ```

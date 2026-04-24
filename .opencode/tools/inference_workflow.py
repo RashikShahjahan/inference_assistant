@@ -6,7 +6,6 @@ import importlib.util
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 from mlx_lm import batch_generate as mlx_lm_batch_generate
 
