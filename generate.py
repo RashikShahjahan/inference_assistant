@@ -401,7 +401,7 @@ class GenerationBatch:
         self._matcher_states = [m.make_state() for m in state_machines]
 
         if self.uids:
-            self._step()
+            self._step(emit=False)
 
     def __len__(self):
         return len(self.uids)
@@ -444,7 +444,7 @@ class GenerationBatch:
         self._num_tokens.extend(batch._num_tokens)
         self._matcher_states.extend(batch._matcher_states)
 
-    def _step(self) -> Tuple[List[int], List[Optional[mx.array]]]:
+    def _step(self, emit: bool = True) -> Tuple[List[int], List[Optional[mx.array]]]:
         self._current_tokens = self._next_tokens
         self._current_logprobs = self._next_logprobs
         inputs = self._current_tokens
@@ -466,19 +466,22 @@ class GenerationBatch:
                 processed_logits.append(sample_logits)
             logits = mx.concatenate(processed_logits, axis=0)
 
-        needs_logprobs = any(self.samplers) or not self.sample_on_logits
+        has_samplers = any(self.samplers)
+        needs_logprobs = has_samplers or not self.sample_on_logits
         if needs_logprobs:
             sampler_inputs = logits - mx.logsumexp(logits, axis=-1, keepdims=True)
         else:
             sampler_inputs = logits
 
-        if any(self.samplers):
+        if has_samplers:
             all_samples = []
             for e in range(len(self.uids)):
                 sample_sampler = self.samplers[e] or self.fallback_sampler
                 sampled = sample_sampler(sampler_inputs[e : e + 1])
                 all_samples.append(sampled)
             sampled = mx.concatenate(all_samples, axis=0)
+        elif self.sample_on_logits:
+            sampled = mx.argmax(sampler_inputs, axis=-1)
         else:
             sampled = self.fallback_sampler(sampler_inputs)
 
@@ -490,6 +493,15 @@ class GenerationBatch:
         async_values.extend(lp for lp in self._next_logprobs if lp is not None)
         async_values.extend(token_context)
         mx.async_eval(*async_values)
+
+        if not emit:
+            if any(sti is not None for sti in self.tokens):
+                mx.eval(inputs)
+                inputs = inputs.tolist()
+                for sti, ti in zip(self.tokens, inputs):
+                    if sti is not None:
+                        sti.append(ti)
+            return [], self._current_logprobs
 
         current_values = [inputs]
         current_values.extend(lp for lp in self._current_logprobs if lp is not None)
